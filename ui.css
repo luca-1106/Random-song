@@ -277,3 +277,27 @@ body.landing-page {
   .landing-page .genre-menu { max-height: 45vh; }
   .landing-page .genre-option { min-height: 36px; padding-block: 6px; font-size: 13px; }
 }
+
+
+.landing-page .history-reset-button {
+  margin: 8px auto 0;
+  padding-inline: 10px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.landing-page .history-status {
+  margin: 3px 0 0 !important;
+  max-width: none !important;
+  color: var(--muted);
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+}
+@media (max-height: 700px) {
+  .landing-page .history-reset-button {
+    margin-top: 5px;
+    padding-block: 3px;
+  }
+  .landing-page .history-status {
+    display: none;
+  }
+}
