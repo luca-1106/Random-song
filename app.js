@@ -119,8 +119,9 @@
 
   $('#resetHistory').addEventListener('click', () => {
     try {
+      // Alleen de unieke "ooit afgespeeld"-historie wordt gewist.
+      // De echte laatste 100 afspeelbeurten blijven behouden als recency-geheugen.
       localStorage.removeItem(historyStorageKey);
-      localStorage.removeItem(recentHistoryStorageKey);
     } catch (_) {}
     renderGenres();
     renderHistoryStatus();
