@@ -121,11 +121,13 @@
   let tracks = tracksForGenres(selectedGenres);
   const initialGenres = selectedGenres.includes('alles') ? [] : [...selectedGenres];
   const activeGenres = new Set(initialGenres);
+  const historyAtSessionStart = new Set(readHistory());
+  const startedWithNoFreshSelected = tracksForGenres(selectedGenres).every(track => historyAtSessionStart.has(key(track)));
   let repeatMode = false;
   let expandedAllMode = false;
   let repeatSource = '';
   let sessionRepeatUnlocked = false;
-  let selectedHistoryChoice = '';
+  let selectedHistoryChoice = startedWithNoFreshSelected ? 'stay' : '';
   let noticeTimer;
   let player, browserDeviceId = '', pendingTrack, currentTrack, playerState, stateUpdatedAt = 0, used = new Set(), unavailable = new Set(), isPlaying = false, progressTimer;
 
@@ -324,9 +326,11 @@
         !unavailable.has(key(track)) &&
         !historySet.has(key(track))
       ));
+      const primaryUnused = repeatCandidatesFrom(primaryPool, new Set());
+      const primaryNonRecent = primaryUnused.filter(track => !recent100.has(key(track)));
       const primaryCandidates = primaryFresh.length
         ? primaryFresh
-        : repeatCandidatesFrom(primaryPool, new Set());
+        : (primaryNonRecent.length ? shuffle(primaryNonRecent) : primaryUnused);
 
       if (primaryCandidates.length) {
         if (repeatSource && repeatSource !== 'primary') {
@@ -408,10 +412,10 @@
         continue;
       }
 
-      // Alleen bij het opraken van wereldwijd nieuwe nummers in de
-      // oorspronkelijk gekozen genres krijgt de speler een keuze.
-      // De keuze bestaat uitsluitend zolang daar nog nummers over zijn die
-      // deze sessie niet zijn afgespeeld.
+      // Alleen als de sessie met minstens één wereldwijd nieuw nummer in de
+      // oorspronkelijk gekozen genres begon, kan het opraken daarvan later
+      // een keuze opleveren. Begon de sessie al met 0 nieuwe nummers, dan
+      // blijft de app bewust in de gekozen genres zonder keuzevenster.
       const stillInOriginalPool = activeGenres.size === initialGenres.length && !expandedAllMode;
       const selectedUnused = selectedSessionUnused();
       const selectedFresh = freshFrom(tracksForGenres(selectedGenres), historySet);
@@ -430,11 +434,14 @@
       }
 
       if (selectedHistoryChoice === 'stay' && stillInOriginalPool) {
-        const historicalSelected = shuffle(selectedSessionUnused().filter(track => historySet.has(key(track))));
-        if (historicalSelected.length) {
+        const recent100 = new Set(readRecentHistory());
+        const historicalSelected = selectedSessionUnused().filter(track => historySet.has(key(track)));
+        const historicalNonRecent = historicalSelected.filter(track => !recent100.has(key(track)));
+        const preferredHistorical = shuffle(historicalNonRecent.length ? historicalNonRecent : historicalSelected);
+        if (preferredHistorical.length) {
           tracks = tracksForGenres(selectedGenres);
           updateCount();
-          if (await pickResolved(historicalSelected)) return;
+          if (await pickResolved(preferredHistorical)) return;
           continue;
         }
         // Alle nummers uit de gekozen genres zijn nu ook in deze sessie
