@@ -4,6 +4,25 @@
   const tracks = Array.isArray(window.TRACKS) ? window.TRACKS.filter(track => track?.title && track?.artist) : [];
   const genreNames = { alles: 'Alle genres', pop: 'Pop', rock: 'Rock', nederlands: 'Nederlandstalig', guilty: 'Guilty Pleasures', yachterock: 'Yachtrock', soul: 'Soul & R&B', funkdisco: 'Funk & Disco', country: 'Country & Folk', gitaarmuziek: 'Gitaarmuziek', bluesjazzswing: 'Blues, Jazz & Swing' };
   let selectedGenres = ['alles'];
+  const historyStorageKey = 'muziekmix.playedHistory.v1';
+  const readHistory = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
+      return Array.isArray(parsed) ? [...new Set(parsed.filter(value => typeof value === 'string' && value))] : [];
+    } catch (_) {
+      return [];
+    }
+  };
+  const renderHistoryStatus = message => {
+    const element = $('#historyStatus');
+    if (!element) return;
+    if (message) {
+      element.textContent = message;
+      return;
+    }
+    const count = readHistory().length;
+    element.textContent = count ? `${count} eerder afgespeelde nummers geblokkeerd` : 'De volledige bibliotheek is beschikbaar';
+  };
 
   const setError = message => { $('#errorMessage').textContent = message || ''; $('#errorMessage').hidden = !message; };
   const setStatus = (title, detail, active = false) => { $('#statusText').textContent = title; $('#instruction').textContent = detail; $('#statusDot').classList.toggle('active', active); };
@@ -87,6 +106,12 @@
     if (event.key === 'Escape') closeGenreMenu();
   });
 
+  $('#resetHistory').addEventListener('click', () => {
+    try { localStorage.removeItem(historyStorageKey); } catch (_) {}
+    renderHistoryStatus('Gehele bibliotheek weer vrijgegeven');
+    setStatus('Bibliotheek vrijgegeven', 'Alle nummers kunnen opnieuw worden gekozen.');
+  });
+
   $('#connectSpotify').addEventListener('click', () => guarded(() => window.SpotifyApp.login()));
   $('#disconnectSpotify').addEventListener('click', () => { window.SpotifyApp.clear(); renderConnection(null); setStatus('Spotify ontkoppeld', 'Koppel een account om een sessie te starten.'); });
   $('#startSession').addEventListener('click', () => guarded(async () => {
@@ -99,6 +124,7 @@
 
   (async () => {
     renderGenres();
+    renderHistoryStatus();
     renderConnection(null);
     try { await window.SpotifyApp.handleCallback(); } catch (error) { setError(error.message); }
     await refreshConnection();
