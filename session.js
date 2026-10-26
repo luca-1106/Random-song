@@ -63,13 +63,17 @@
   const rememberPlayed = track => {
     const trackKey = key(track);
 
+    // Lees de recente eventhistorie vóórdat de unieke historie wordt bijgewerkt.
+    // Zo wordt bij migratie vanaf een oudere versie de huidige afspeelbeurt
+    // niet zowel via de seed als via de nieuwe event-entry toegevoegd.
+    const recent = readRecentHistory();
+
     // Unieke historie voor de vraag: is dit nummer ooit eerder afgespeeld?
     const history = readHistory().filter(value => value !== trackKey);
     history.push(trackKey);
     writeHistory(history);
 
     // Aparte eventhistorie voor exact de laatste 100 afspeelbeurten.
-    const recent = readRecentHistory();
     recent.push(trackKey);
     writeRecentHistory(recent);
   };
