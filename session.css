@@ -516,3 +516,21 @@ body.session-page {
 .session-page .session-notice[hidden] {
   display: none !important;
 }
+
+
+/* Keuze wanneer de gekozen genres alleen nog eerder gehoorde nummers bevatten. */
+.session-page .genre-choice-dialog {
+  width: min(calc(100% - 28px), 390px);
+}
+.session-page .genre-choice-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.session-page .genre-choice-actions button {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.2;
+}
