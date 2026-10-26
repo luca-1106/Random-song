@@ -301,3 +301,29 @@ body.landing-page {
     display: none;
   }
 }
+
+
+.landing-page .genre-option-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.landing-page .genre-available-count {
+  margin-left: auto;
+  min-width: 2.5ch;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.landing-page .history-reset-button[hidden] {
+  display: none !important;
+}
+@media (max-height: 700px) {
+  .landing-page .genre-available-count {
+    font-size: 11px;
+  }
+}
