@@ -222,6 +222,12 @@
     !historySet.has(key(track))
   );
 
+  const preferOutsideRecent100 = candidates => {
+    const recent100 = new Set(readRecentHistory());
+    const nonRecent = candidates.filter(track => !recent100.has(key(track)));
+    return shuffle(nonRecent.length ? nonRecent : candidates);
+  };
+
   const closestGenreWithFreshTracks = historySet => {
     const candidates = allGenreKeys
       .filter(genre => !activeGenres.has(genre))
@@ -321,7 +327,7 @@
       // afspeelgeschiedenis staan altijd absolute voorrang. Pas daarna komen
       // eerder gespeelde nummers aan bod. Binnen de gekozen genres geldt de
       // laatste-100-regel niet; wel mag een nummer maar één keer per sessie.
-      const primaryFresh = shuffle(primaryPool.filter(track =>
+      const primaryFresh = preferOutsideRecent100(primaryPool.filter(track =>
         !used.has(key(track)) &&
         !unavailable.has(key(track)) &&
         !historySet.has(key(track))
@@ -408,7 +414,7 @@
       const fresh = freshFrom(tracks, historySet);
 
       if (fresh.length) {
-        if (await pickResolved(shuffle(fresh))) return;
+        if (await pickResolved(preferOutsideRecent100(fresh))) return;
         continue;
       }
 
@@ -434,10 +440,8 @@
       }
 
       if (selectedHistoryChoice === 'stay' && stillInOriginalPool) {
-        const recent100 = new Set(readRecentHistory());
         const historicalSelected = selectedSessionUnused().filter(track => historySet.has(key(track)));
-        const historicalNonRecent = historicalSelected.filter(track => !recent100.has(key(track)));
-        const preferredHistorical = shuffle(historicalNonRecent.length ? historicalNonRecent : historicalSelected);
+        const preferredHistorical = preferOutsideRecent100(historicalSelected);
         if (preferredHistorical.length) {
           tracks = tracksForGenres(selectedGenres);
           updateCount();
