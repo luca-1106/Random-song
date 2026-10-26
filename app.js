@@ -5,6 +5,7 @@
   const genreNames = { alles: 'Alle genres', pop: 'Pop', rock: 'Rock', nederlands: 'Nederlandstalig', guilty: 'Guilty Pleasures', yachterock: 'Yachtrock', soul: 'Soul & R&B', funkdisco: 'Funk & Disco', country: 'Country & Folk', gitaarmuziek: 'Gitaarmuziek', bluesjazzswing: 'Blues, Jazz & Swing' };
   let selectedGenres = ['alles'];
   const historyStorageKey = 'muziekmix.playedHistory.v1';
+  const recentHistoryStorageKey = 'muziekmix.recentPlaybackHistory.v1';
   const readHistory = () => {
     try {
       const parsed = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
@@ -107,7 +108,10 @@
   });
 
   $('#resetHistory').addEventListener('click', () => {
-    try { localStorage.removeItem(historyStorageKey); } catch (_) {}
+    try {
+      localStorage.removeItem(historyStorageKey);
+      localStorage.removeItem(recentHistoryStorageKey);
+    } catch (_) {}
     renderHistoryStatus('Gehele bibliotheek weer vrijgegeven');
     setStatus('Bibliotheek vrijgegeven', 'Alle nummers kunnen opnieuw worden gekozen.');
   });
