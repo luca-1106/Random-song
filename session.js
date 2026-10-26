@@ -240,11 +240,14 @@
       const history = readHistory();
       const recent100 = new Set(history.slice(-100));
       const primaryPool = tracksForGenres(selectedGenres);
-      const primaryCandidates = repeatCandidatesFrom(primaryPool, recent100);
+      // Na volledige bibliotheek-uitputting blijven de oorspronkelijk gekozen
+      // genres leidend. Binnen die genres telt alleen of een nummer in deze
+      // sessie al gespeeld is; de laatste-100-regel geldt hier niet.
+      const primaryCandidates = repeatCandidatesFrom(primaryPool, new Set());
 
       if (primaryCandidates.length) {
         if (repeatSource && repeatSource !== 'primary') {
-          showSessionNotice('Er zijn weer nummers uit je oorspronkelijk gekozen genres beschikbaar. We gaan daar verder.');
+          showSessionNotice('Er zijn weer nog niet in deze sessie afgespeelde nummers uit je oorspronkelijk gekozen genres beschikbaar. We gaan daar verder.');
         }
         repeatSource = 'primary';
         tracks = primaryPool;
