@@ -266,7 +266,7 @@
       repeatMode = true;
       tracks = tracksForGenres(selectedGenres);
       updateCount();
-      showSessionNotice('Alle nummers in de volledige muziekbibliotheek zijn minstens één keer gespeeld. Alle nummers worden weer beschikbaar, met voorrang voor je gekozen genres. De laatste 100 afgespeelde nummers blijven geblokkeerd.');
+      showSessionNotice('Alle nummers in de volledige muziekbibliotheek zijn minstens één keer gespeeld. Binnen je gekozen genres worden nummers weer beschikbaar zolang ze deze sessie nog niet zijn gespeeld. Bij uitwijken naar andere genres blijven de laatste 100 afspeelbeurten geblokkeerd.');
     }
   };
 
