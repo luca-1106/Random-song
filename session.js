@@ -229,7 +229,6 @@
 
       const recent100 = new Set(history.slice(-100));
       const repeatCandidates = shuffle(tracks.filter(track =>
-        !used.has(key(track)) &&
         !unavailable.has(key(track)) &&
         !recent100.has(key(track))
       ));
