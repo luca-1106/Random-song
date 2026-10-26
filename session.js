@@ -19,7 +19,9 @@
   const sourceTracks = Array.isArray(window.TRACKS) ? window.TRACKS.filter(track => track?.title && track?.artist) : [];
   const key = track => `${track.title}\u0000${track.artist}`.toLocaleLowerCase('nl');
   const historyStorageKey = 'muziekmix.playedHistory.v1';
+  const recentHistoryStorageKey = 'muziekmix.recentPlaybackHistory.v1';
   let memoryHistory = [];
+  let memoryRecentHistory = [];
   const readHistory = () => {
     try {
       const parsed = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
@@ -36,11 +38,40 @@
     memoryHistory = clean;
     try { localStorage.setItem(historyStorageKey, JSON.stringify(clean)); } catch (_) {}
   };
+  const readRecentHistory = () => {
+    try {
+      const raw = localStorage.getItem(recentHistoryStorageKey);
+      if (!raw) {
+        const seeded = readHistory().slice(-100);
+        memoryRecentHistory = seeded;
+        return [...seeded];
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [...memoryRecentHistory];
+      const clean = parsed.filter(value => typeof value === 'string' && value).slice(-100);
+      memoryRecentHistory = clean;
+      return [...clean];
+    } catch (_) {
+      return memoryRecentHistory.length ? [...memoryRecentHistory] : readHistory().slice(-100);
+    }
+  };
+  const writeRecentHistory = history => {
+    const clean = history.filter(value => typeof value === 'string' && value).slice(-100);
+    memoryRecentHistory = clean;
+    try { localStorage.setItem(recentHistoryStorageKey, JSON.stringify(clean)); } catch (_) {}
+  };
   const rememberPlayed = track => {
     const trackKey = key(track);
+
+    // Unieke historie voor de vraag: is dit nummer ooit eerder afgespeeld?
     const history = readHistory().filter(value => value !== trackKey);
     history.push(trackKey);
     writeHistory(history);
+
+    // Aparte eventhistorie voor exact de laatste 100 afspeelbeurten.
+    const recent = readRecentHistory();
+    recent.push(trackKey);
+    writeRecentHistory(recent);
   };
   const normalise = value => String(value || '').toLocaleLowerCase('nl').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const normaliseTitle = value => normalise(value)
@@ -276,7 +307,7 @@
     while (true) {
       const history = readHistory();
       const historySet = new Set(history);
-      const recent100 = new Set(history.slice(-100));
+      const recent100 = new Set(readRecentHistory());
       const primaryPool = tracksForGenres(selectedGenres);
 
       // Binnen de gekozen genres hebben nummers die nog nooit in de globale
