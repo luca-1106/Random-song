@@ -17,7 +17,31 @@
     return `${selectedGenres.length} genres`;
   };
   const sourceTracks = Array.isArray(window.TRACKS) ? window.TRACKS.filter(track => track?.title && track?.artist) : [];
-  const key = track => `${track.title}\u0000${track.artist}`.toLowerCase();
+  const key = track => `${track.title}\u0000${track.artist}`.toLocaleLowerCase('nl');
+  const historyStorageKey = 'muziekmix.playedHistory.v1';
+  let memoryHistory = [];
+  const readHistory = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
+      if (!Array.isArray(parsed)) return [...memoryHistory];
+      const clean = [...new Set(parsed.filter(value => typeof value === 'string' && value))];
+      memoryHistory = clean;
+      return [...clean];
+    } catch (_) {
+      return [...memoryHistory];
+    }
+  };
+  const writeHistory = history => {
+    const clean = [...new Set(history.filter(value => typeof value === 'string' && value))];
+    memoryHistory = clean;
+    try { localStorage.setItem(historyStorageKey, JSON.stringify(clean)); } catch (_) {}
+  };
+  const rememberPlayed = track => {
+    const trackKey = key(track);
+    const history = readHistory().filter(value => value !== trackKey);
+    history.push(trackKey);
+    writeHistory(history);
+  };
   const normalise = value => String(value || '').toLocaleLowerCase('nl').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const normaliseTitle = value => normalise(value)
     .replace(/\b\d{4}\s+remaster(?:ed)?\b/g, '')
@@ -79,15 +103,32 @@
   }
   function renderTrack(spotifyTrack, sourceTrack, revealArtwork = false) { const spotifyLink = $('#spotifyTrackLink'); const albumId = spotifyTrack.album?.id || spotifyTrack.album?.uri?.match(/^spotify:album:([A-Za-z0-9]+)$/)?.[1]; spotifyLink.href = albumId ? `https://open.spotify.com/album/${encodeURIComponent(albumId)}` : '#'; spotifyLink.hidden = true; spotifyLink.dataset.available = String(Boolean(albumId));  $('#trackTitle').textContent = sourceTrack.title; const artistElement = $('#trackArtist'); const creditedArtists = (spotifyTrack.artists || []).map(artist => artist?.name).filter(Boolean); const hasMultipleArtists = creditedArtists.length > 1; artistElement.textContent = hasMultipleArtists ? creditedArtists.join(', ') : sourceTrack.artist; artistElement.classList.toggle('multiple-artists', hasMultipleArtists); const year = String(sourceTrack.year || spotifyTrack.album?.release_date || '').match(/\d{4}/)?.[0] || ''; $('#trackYear').textContent = year; $('#trackYear').hidden = !year; const image = spotifyTrack.album?.images?.[0]?.url; $('#albumArt').hidden = !revealArtwork || !image; $('#albumFallback').hidden = revealArtwork && Boolean(image); if (image) { $('#albumArt').src = image; $('#albumArt').alt = `Albumhoes: ${spotifyTrack.album.name}`; } }
   async function prepareTrack() {
-    const candidates = tracks.filter(track => !used.has(key(track)) && !unavailable.has(key(track)));
-    // Fisher-Yates: elke nog niet afgespeelde track heeft gelijke kans.
-    for (let i = candidates.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-    }
-    if (!candidates.length) {
+    const eligible = tracks.filter(track => !used.has(key(track)) && !unavailable.has(key(track)));
+    if (!eligible.length) {
       throw new Error('Alle beschikbare nummers van de gekozen genres zijn afgespeeld.');
     }
+
+    const history = readHistory();
+    const historySet = new Set(history);
+    const fresh = eligible.filter(track => !historySet.has(key(track)));
+    let candidates;
+
+    if (fresh.length) {
+      candidates = [...fresh];
+      // Zolang er nog nooit-afgespeelde nummers in deze genrepool zitten,
+      // blijven alle eerder afgespeelde nummers geblokkeerd.
+      for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+    } else {
+      // Pas als de gekozen pool volledig in de historie staat, recyclen we.
+      // Oudst afgespeelde nummers komen als eerste opnieuw beschikbaar.
+      const eligibleByKey = new Map(eligible.map(track => [key(track), track]));
+      candidates = history.map(trackKey => eligibleByKey.get(trackKey)).filter(Boolean);
+      if (!candidates.length) candidates = [...eligible];
+    }
+
     for (const source of candidates) {
       try { const spotify = await resolve(source); pendingTrack = { source, spotify }; return; }
       catch (error) { if (error.code !== 'TRACK_NOT_FOUND') throw error; unavailable.add(key(source)); }
@@ -95,7 +136,7 @@
     throw new Error('Geen van de resterende nummers kon betrouwbaar op Spotify worden gevonden.');
   }
   async function waitForTrack(uri) { for (let attempt = 0; attempt < 30; attempt += 1) { if (playerState?.track_window?.current_track?.uri === uri && !playerState.paused) return; await wait(150); } throw new Error('Safari kon de Spotify-audio niet starten. Koppel Spotify opnieuw en probeer daarna nogmaals.'); }
-  async function playPending() { if (!pendingTrack) await prepareTrack(); await player.activateElement(); await window.SpotifyApp.request(`/me/player/play?device_id=${encodeURIComponent(browserDeviceId)}`, 'PUT', { uris: [pendingTrack.spotify.uri] }); await player.resume(); await waitForTrack(pendingTrack.spotify.uri); renderTrack(pendingTrack.spotify, pendingTrack.source, false); $('.player-card').classList.add('track-concealed'); $('#revealButton').hidden = false; currentTrack = pendingTrack.spotify; used.add(key(pendingTrack.source)); pendingTrack = null; isPlaying = true; updateCount(); startTimer(); $('#startPlayback').hidden = true; $('.player-card').classList.remove('awaiting-playback'); $('#pauseButton').disabled = false; $('#nextButton').disabled = false; setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} van ${tracks.length} nummers afgespeeld.`, true); }
+  async function playPending() { if (!pendingTrack) await prepareTrack(); await player.activateElement(); await window.SpotifyApp.request(`/me/player/play?device_id=${encodeURIComponent(browserDeviceId)}`, 'PUT', { uris: [pendingTrack.spotify.uri] }); await player.resume(); await waitForTrack(pendingTrack.spotify.uri); renderTrack(pendingTrack.spotify, pendingTrack.source, false); $('.player-card').classList.add('track-concealed'); $('#revealButton').hidden = false; currentTrack = pendingTrack.spotify; used.add(key(pendingTrack.source)); rememberPlayed(pendingTrack.source); pendingTrack = null; isPlaying = true; updateCount(); startTimer(); $('#startPlayback').hidden = true; $('.player-card').classList.remove('awaiting-playback'); $('#pauseButton').disabled = false; $('#nextButton').disabled = false; setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} van ${tracks.length} nummers afgespeeld.`, true); }
   async function nextTrack() { await prepareTrack(); await playPending(); }
   async function togglePause() { if (isPlaying) { await player.pause(); updateProgress(); isPlaying = false; setPauseButton('play', 'Verder luisteren'); setStatus('Gepauzeerd', 'Druk op Verder luisteren om deze track te hervatten.'); } else { await player.resume(); isPlaying = true; stateUpdatedAt = Date.now(); setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} van ${tracks.length} nummers afgespeeld.`, true); } }
   async function guarded(action) { try { setError(); await action(); } catch (error) { setError(error.message || 'Er ging iets mis.'); setStatus('Actie niet gelukt', 'Controleer je Spotify-koppeling en probeer opnieuw.'); } }
