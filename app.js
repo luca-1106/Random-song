@@ -119,6 +119,13 @@
 
   $('#resetHistory').addEventListener('click', () => {
     try {
+      // Migratie voor oudere gebruikers: als de aparte recente historie nog
+      // niet bestaat, bewaar dan eerst de laatste maximaal 100 bekende tracks.
+      if (!localStorage.getItem(recentHistoryStorageKey)) {
+        const fallbackRecent = readHistory().slice(-100);
+        localStorage.setItem(recentHistoryStorageKey, JSON.stringify(fallbackRecent));
+      }
+
       // Alleen de unieke "ooit afgespeeld"-historie wordt gewist.
       // De echte laatste 100 afspeelbeurten blijven behouden als recency-geheugen.
       localStorage.removeItem(historyStorageKey);
