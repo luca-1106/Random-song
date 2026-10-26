@@ -156,10 +156,11 @@
       return;
     }
 
+    const preventCancel = event => event.preventDefault();
     const finish = choice => {
       stay.removeEventListener('click', chooseStay);
       switchButton.removeEventListener('click', chooseSwitch);
-      dialog.removeEventListener('cancel', chooseSwitch);
+      dialog.removeEventListener('cancel', preventCancel);
       if (dialog.open) dialog.close();
       resolve(choice);
     };
@@ -168,7 +169,7 @@
 
     stay.addEventListener('click', chooseStay);
     switchButton.addEventListener('click', chooseSwitch);
-    dialog.addEventListener('cancel', chooseSwitch, { once: true });
+    dialog.addEventListener('cancel', preventCancel);
     dialog.showModal();
   });
   const buttonIcons = {
