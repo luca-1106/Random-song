@@ -492,3 +492,27 @@ body.session-page {
 @media (max-height: 700px) {
   .session-page .spotify-track-link { margin-top: clamp(12px, 2dvh, 20px); }
 }
+
+
+/* Tijdelijke melding wanneer de sessie automatisch naar een ander genre overschakelt. */
+.session-page .session-notice {
+  position: absolute;
+  z-index: 8;
+  top: clamp(10px, 1.8dvh, 16px);
+  left: clamp(10px, 3vw, 16px);
+  right: clamp(10px, 3vw, 16px);
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #66744e;
+  border-radius: 13px;
+  background: #20261bcc;
+  color: var(--text);
+  box-shadow: 0 8px 24px #0006;
+  backdrop-filter: blur(7px);
+  font-size: clamp(10px, 3vw, 12px);
+  line-height: 1.4;
+  text-align: center;
+}
+.session-page .session-notice[hidden] {
+  display: none !important;
+}
