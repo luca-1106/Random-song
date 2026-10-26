@@ -133,6 +133,7 @@
       try { const spotify = await resolve(source); pendingTrack = { source, spotify }; return; }
       catch (error) { if (error.code !== 'TRACK_NOT_FOUND') throw error; unavailable.add(key(source)); }
     }
+    if (fresh.length) return prepareTrack();
     throw new Error('Geen van de resterende nummers kon betrouwbaar op Spotify worden gevonden.');
   }
   async function waitForTrack(uri) { for (let attempt = 0; attempt < 30; attempt += 1) { if (playerState?.track_window?.current_track?.uri === uri && !playerState.paused) return; await wait(150); } throw new Error('Safari kon de Spotify-audio niet starten. Koppel Spotify opnieuw en probeer daarna nogmaals.'); }
