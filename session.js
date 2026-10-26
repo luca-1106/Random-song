@@ -151,13 +151,13 @@
       .map(genre => {
         const freshCount = freshFrom(tracksForGenre(genre), historySet).length;
         if (!freshCount) return null;
-        const bases = activeGenres.size ? [...activeGenres] : initialGenres;
+        const bases = initialGenres.length ? initialGenres : [...activeGenres];
         const score = bases.length
-          ? Math.min(...bases.map(base => {
+          ? bases.reduce((total, base) => {
               const order = similarGenres[base] || [];
               const index = order.indexOf(genre);
-              return index === -1 ? 99 : index + 1;
-            }))
+              return total + (index === -1 ? 99 : index + 1);
+            }, 0) / bases.length
           : 99;
         return { genre, score, freshCount };
       })
