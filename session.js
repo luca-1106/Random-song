@@ -88,6 +88,8 @@
   const activeGenres = new Set(initialGenres);
   let repeatMode = false;
   let expandedAllMode = false;
+  let repeatSource = '';
+  let sessionRepeatUnlocked = false;
   let noticeTimer;
   let player, browserDeviceId = '', pendingTrack, currentTrack, playerState, stateUpdatedAt = 0, used = new Set(), unavailable = new Set(), isPlaying = false, progressTimer;
 
@@ -193,32 +195,137 @@
   const enterRepeatMode = () => {
     if (!repeatMode) {
       repeatMode = true;
-      tracks = mergeTracks(sourceTracks);
+      tracks = tracksForGenres(selectedGenres);
       updateCount();
-      showSessionNotice('Alle nummers in de volledige muziekbibliotheek zijn minstens één keer gespeeld. Nummers kunnen nu opnieuw voorkomen; de laatste 100 afgespeelde nummers blijven steeds geblokkeerd.');
+      showSessionNotice('Alle nummers in de volledige muziekbibliotheek zijn minstens één keer gespeeld. Alle nummers worden weer beschikbaar, met voorrang voor je gekozen genres. De laatste 100 afgespeelde nummers blijven geblokkeerd.');
     }
   };
 
+  const repeatCandidatesFrom = (pool, recent100, allowUsed = false) => shuffle(pool.filter(track =>
+    !unavailable.has(key(track)) &&
+    !recent100.has(key(track)) &&
+    (allowUsed || !used.has(key(track)))
+  ));
+
+  const repeatFallbackOrder = () => allGenreKeys
+    .filter(genre => !initialGenres.includes(genre))
+    .map(genre => {
+      const bases = initialGenres.length ? initialGenres : allGenreKeys;
+      const score = bases.reduce((total, base) => {
+        const order = similarGenres[base] || [];
+        const index = order.indexOf(genre);
+        return total + (index === -1 ? 99 : index + 1);
+      }, 0) / bases.length;
+      return { genre, score };
+    })
+    .sort((a, b) => a.score - b.score || a.genre.localeCompare(b.genre))
+    .map(item => item.genre);
+
+  const pickResolved = async candidates => {
+    for (const source of candidates) {
+      try {
+        const spotify = await resolve(source);
+        pendingTrack = { source, spotify };
+        return true;
+      } catch (error) {
+        if (error.code !== 'TRACK_NOT_FOUND') throw error;
+        unavailable.add(key(source));
+      }
+    }
+    return false;
+  };
+
+  async function prepareRepeatTrack() {
+    while (true) {
+      const history = readHistory();
+      const recent100 = new Set(history.slice(-100));
+      const primaryPool = tracksForGenres(selectedGenres);
+      const primaryCandidates = repeatCandidatesFrom(primaryPool, recent100);
+
+      if (primaryCandidates.length) {
+        if (repeatSource && repeatSource !== 'primary') {
+          showSessionNotice('Er zijn weer nummers uit je oorspronkelijk gekozen genres beschikbaar. We gaan daar verder.');
+        }
+        repeatSource = 'primary';
+        tracks = primaryPool;
+        updateCount();
+        if (await pickResolved(primaryCandidates)) return;
+        continue;
+      }
+
+      if (selectedGenres.includes('alles')) {
+        const otherCandidates = repeatCandidatesFrom(sourceTracks.filter(track => track.includeInAll === false), recent100);
+        if (otherCandidates.length) {
+          if (repeatSource !== 'other-library') {
+            showSessionNotice('De nog beschikbare nummers uit Alles zijn in deze sessie gespeeld of tijdelijk geblokkeerd. We gaan verder met de overige muziekbibliotheek.');
+          }
+          repeatSource = 'other-library';
+          tracks = mergeTracks(primaryPool, sourceTracks.filter(track => track.includeInAll === false));
+          updateCount();
+          if (await pickResolved(otherCandidates)) return;
+          continue;
+        }
+      } else {
+        for (const genre of repeatFallbackOrder()) {
+          const candidates = repeatCandidatesFrom(tracksForGenre(genre), recent100);
+          if (!candidates.length) continue;
+          if (repeatSource !== genre) {
+            showSessionNotice(`Binnen je gekozen genres is momenteel geen nieuw nummer voor deze sessie beschikbaar. We gaan verder met ${genreNames[genre]}.`);
+          }
+          repeatSource = genre;
+          tracks = mergeTracks(primaryPool, tracksForGenre(genre));
+          updateCount();
+          if (await pickResolved(candidates)) return;
+        }
+      }
+
+      const anywhereUnused = repeatCandidatesFrom(sourceTracks, recent100);
+      if (anywhereUnused.length) {
+        if (repeatSource !== 'other-library') {
+          showSessionNotice('Binnen de gekozen en verwante genres is momenteel niets beschikbaar. We gaan verder met andere nummers uit de muziekbibliotheek.');
+        }
+        repeatSource = 'other-library';
+        tracks = mergeTracks(sourceTracks);
+        updateCount();
+        if (await pickResolved(anywhereUnused)) return;
+        continue;
+      }
+
+      // Pas als ieder nummer ook binnen de huidige sessie is gebruikt, mag
+      // een nummer binnen dezelfde sessie opnieuw voorkomen. De laatste 100
+      // afspeelbeurten blijven altijd uitgesloten.
+      const replayCandidates = repeatCandidatesFrom(sourceTracks, recent100, true);
+      if (!replayCandidates.length) {
+        throw new Error('Er zijn tijdelijk geen nummers beschikbaar buiten de laatste 100 afgespeelde nummers.');
+      }
+      if (!sessionRepeatUnlocked) {
+        sessionRepeatUnlocked = true;
+        showSessionNotice('Ook binnen deze sessie zijn alle beschikbare nummers gespeeld. Nummers kunnen opnieuw voorkomen, maar nooit binnen de laatste 100 afspeelbeurten.');
+      }
+      repeatSource = 'session-repeat';
+      tracks = mergeTracks(sourceTracks);
+      updateCount();
+      if (await pickResolved(replayCandidates)) return;
+    }
+  }
+
   async function prepareTrack() {
+    if (repeatMode) return prepareRepeatTrack();
+
     while (true) {
       const history = readHistory();
       const historySet = new Set(history);
       const fresh = freshFrom(tracks, historySet);
 
       if (fresh.length) {
-        const candidates = shuffle(fresh);
-        for (const source of candidates) {
-          try { const spotify = await resolve(source); pendingTrack = { source, spotify }; return; }
-          catch (error) { if (error.code !== 'TRACK_NOT_FOUND') throw error; unavailable.add(key(source)); }
-        }
+        if (await pickResolved(shuffle(fresh))) return;
         continue;
       }
 
-      if (!repeatMode && expandToFreshGenre(historySet)) continue;
+      if (expandToFreshGenre(historySet)) continue;
 
       const globallyFresh = freshFrom(sourceTracks, historySet);
-      if (!repeatMode && globallyFresh.length) {
-        // Dit kan alleen gebeuren als een brontrack niet aan een bekend genre gekoppeld is.
+      if (globallyFresh.length) {
         tracks = mergeTracks(tracks, globallyFresh);
         updateCount();
         showSessionNotice('De gekozen genres zijn volledig gespeeld. We gaan verder met overige nog niet afgespeelde nummers uit de muziekbibliotheek.');
@@ -226,21 +333,7 @@
       }
 
       enterRepeatMode();
-
-      const recent100 = new Set(history.slice(-100));
-      const repeatCandidates = shuffle(tracks.filter(track =>
-        !unavailable.has(key(track)) &&
-        !recent100.has(key(track))
-      ));
-
-      if (!repeatCandidates.length) {
-        throw new Error('Er zijn tijdelijk geen nummers beschikbaar buiten de laatste 100 afgespeelde nummers.');
-      }
-
-      for (const source of repeatCandidates) {
-        try { const spotify = await resolve(source); pendingTrack = { source, spotify }; return; }
-        catch (error) { if (error.code !== 'TRACK_NOT_FOUND') throw error; unavailable.add(key(source)); }
-      }
+      return prepareRepeatTrack();
     }
   }
   async function waitForTrack(uri) { for (let attempt = 0; attempt < 30; attempt += 1) { if (playerState?.track_window?.current_track?.uri === uri && !playerState.paused) return; await wait(150); } throw new Error('Safari kon de Spotify-audio niet starten. Koppel Spotify opnieuw en probeer daarna nogmaals.'); }
