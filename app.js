@@ -3,6 +3,9 @@
   const $ = selector => document.querySelector(selector);
   const tracks = Array.isArray(window.TRACKS) ? window.TRACKS.filter(track => track?.title && track?.artist) : [];
   const genreNames = { alles: 'Alle genres', pop: 'Pop', rock: 'Rock', nederlands: 'Nederlandstalig', guilty: 'Guilty Pleasures', yachterock: 'Yachtrock', soul: 'Soul & R&B', funkdisco: 'Funk & Disco', country: 'Country & Folk', gitaarmuziek: 'Gitaarmuziek', bluesjazzswing: 'Blues, Jazz & Swing' };
+  const trackKey = track => `${track.title}\u0000${track.artist}`.toLocaleLowerCase('nl');
+  const uniqueTracks = list => [...new Map(list.map(track => [trackKey(track), track])).values()];
+  const libraryKeys = new Set(uniqueTracks(tracks).map(trackKey));
   let selectedGenres = ['alles'];
   const historyStorageKey = 'muziekmix.playedHistory.v1';
   const recentHistoryStorageKey = 'muziekmix.recentPlaybackHistory.v1';
@@ -14,15 +17,14 @@
       return [];
     }
   };
+  const currentPlayedHistory = () => readHistory().filter(trackKeyValue => libraryKeys.has(trackKeyValue));
   const renderHistoryStatus = message => {
     const element = $('#historyStatus');
+    const resetButton = $('#resetHistory');
+    const playedCount = currentPlayedHistory().length;
+    if (resetButton) resetButton.hidden = playedCount === 0;
     if (!element) return;
-    if (message) {
-      element.textContent = message;
-      return;
-    }
-    const count = readHistory().length;
-    element.textContent = count ? `${count} eerder afgespeelde nummers geblokkeerd` : 'De volledige bibliotheek is beschikbaar';
+    element.textContent = message || (playedCount ? `${playedCount} eerder afgespeelde nummers geblokkeerd` : 'De volledige bibliotheek is beschikbaar');
   };
 
   const setError = message => { $('#errorMessage').textContent = message || ''; $('#errorMessage').hidden = !message; };
@@ -33,21 +35,29 @@
     if (selectedGenres.length === 2) return selectedGenres.map(value => genreNames[value]).join(' + ');
     return `${selectedGenres.length} genres geselecteerd`;
   };
-  const pool = () => {
-    const all = selectedGenres.includes('alles');
+  const poolForGenres = genres => {
+    const all = genres.includes('alles');
     const matching = all ? tracks.filter(track => track.includeInAll !== false) : tracks.filter(track => {
-      const genres = Array.isArray(track.genres) ? track.genres : [track.genre].filter(Boolean);
-      return genres.some(genre => selectedGenres.includes(genre));
+      const trackGenres = Array.isArray(track.genres) ? track.genres : [track.genre].filter(Boolean);
+      return trackGenres.some(genre => genres.includes(genre));
     });
-    return [...new Map(matching.map(track => [`${track.title}\u0000${track.artist}`.toLowerCase(), track])).values()];
+    return uniqueTracks(matching);
+  };
+  const pool = () => poolForGenres(selectedGenres);
+  const availableCount = genres => {
+    const played = new Set(readHistory());
+    return poolForGenres(genres).filter(track => !played.has(trackKey(track))).length;
   };
 
   function renderGenres() {
-    const count = pool().length;
-    $('#genreCount').textContent = `${count} nummers`;
+    const available = availableCount(selectedGenres);
+    $('#genreCount').textContent = `${available} beschikbaar`;
     $('#genreSelectionText').textContent = selectedLabel();
     document.querySelectorAll('#genreMenu input[type="checkbox"]').forEach(input => {
       input.checked = selectedGenres.includes(input.value);
+      const option = input.closest('.genre-option');
+      const count = option?.querySelector('.genre-available-count');
+      if (count) count.textContent = String(availableCount([input.value]));
     });
   }
 
@@ -112,7 +122,8 @@
       localStorage.removeItem(historyStorageKey);
       localStorage.removeItem(recentHistoryStorageKey);
     } catch (_) {}
-    renderHistoryStatus('Gehele bibliotheek weer vrijgegeven');
+    renderGenres();
+    renderHistoryStatus();
     setStatus('Bibliotheek vrijgegeven', 'Alle nummers kunnen opnieuw worden gekozen.');
   });
 
