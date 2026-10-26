@@ -90,6 +90,7 @@
   let expandedAllMode = false;
   let repeatSource = '';
   let sessionRepeatUnlocked = false;
+  let selectedHistoryChoice = '';
   let noticeTimer;
   let player, browserDeviceId = '', pendingTrack, currentTrack, playerState, stateUpdatedAt = 0, used = new Set(), unavailable = new Set(), isPlaying = false, progressTimer;
 
@@ -103,6 +104,42 @@
     notice.hidden = false;
     noticeTimer = setTimeout(() => { notice.hidden = true; }, 9000);
   };
+
+  const selectedSessionUnused = () => tracksForGenres(selectedGenres).filter(track =>
+    !used.has(key(track)) &&
+    !unavailable.has(key(track))
+  );
+
+  const askSelectedGenreHistoryChoice = nextLabel => new Promise(resolve => {
+    const dialog = $('#genreChoiceDialog');
+    const text = $('#genreChoiceText');
+    const stay = $('#stayInGenres');
+    const switchButton = $('#switchGenre');
+    const selectedLabel = sessionGenreLabel();
+
+    text.textContent = `Alle nummers binnen ${selectedLabel} die je nog nooit eerder hebt gehoord, zijn gespeeld. Er zijn wel nog nummers uit ${selectedLabel} over die je deze sessie nog niet hebt gehoord.`;
+    switchButton.textContent = nextLabel ? `Ga verder met ${nextLabel}` : 'Ga verder met nieuwe muziek';
+
+    if (typeof dialog.showModal !== 'function') {
+      resolve(window.confirm(`${text.textContent}\n\nOK = blijf bij je gekozen genres. Annuleren = ga verder met nieuwe muziek.`) ? 'stay' : 'switch');
+      return;
+    }
+
+    const finish = choice => {
+      stay.removeEventListener('click', chooseStay);
+      switchButton.removeEventListener('click', chooseSwitch);
+      dialog.removeEventListener('cancel', chooseSwitch);
+      if (dialog.open) dialog.close();
+      resolve(choice);
+    };
+    const chooseStay = () => finish('stay');
+    const chooseSwitch = () => finish('switch');
+
+    stay.addEventListener('click', chooseStay);
+    switchButton.addEventListener('click', chooseSwitch);
+    dialog.addEventListener('cancel', chooseSwitch, { once: true });
+    dialog.showModal();
+  });
   const buttonIcons = {
     play: '<svg viewBox="0 0 24 24" focusable="false"><path d="M8 5v14l11-7z"/></svg>',
     pause: '<svg viewBox="0 0 24 24" focusable="false"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>'
@@ -335,13 +372,49 @@
         continue;
       }
 
+      // Alleen bij het opraken van wereldwijd nieuwe nummers in de
+      // oorspronkelijk gekozen genres krijgt de speler een keuze.
+      // De keuze bestaat uitsluitend zolang daar nog nummers over zijn die
+      // deze sessie niet zijn afgespeeld.
+      const stillInOriginalPool = activeGenres.size === initialGenres.length && !expandedAllMode;
+      const selectedUnused = selectedSessionUnused();
+      const selectedFresh = freshFrom(tracksForGenres(selectedGenres), historySet);
+      const globallyFresh = freshFrom(sourceTracks, historySet);
+
+      if (
+        stillInOriginalPool &&
+        !selectedFresh.length &&
+        selectedUnused.length &&
+        globallyFresh.length &&
+        !selectedHistoryChoice
+      ) {
+        const nextGenre = selectedGenres.includes('alles') ? '' : closestGenreWithFreshTracks(historySet);
+        const nextLabel = nextGenre ? genreNames[nextGenre] : 'nieuwe muziek';
+        selectedHistoryChoice = await askSelectedGenreHistoryChoice(nextLabel);
+      }
+
+      if (selectedHistoryChoice === 'stay' && stillInOriginalPool) {
+        const historicalSelected = shuffle(selectedSessionUnused().filter(track => historySet.has(key(track))));
+        if (historicalSelected.length) {
+          tracks = tracksForGenres(selectedGenres);
+          updateCount();
+          if (await pickResolved(historicalSelected)) return;
+          continue;
+        }
+        // Alle nummers uit de gekozen genres zijn nu ook in deze sessie
+        // gebruikt. Vanaf hier mag niet opnieuw binnen hetzelfde genre worden
+        // herhaald zolang elders nog sessie-ongebruikte muziek bestaat.
+        selectedHistoryChoice = 'switch';
+        showSessionNotice('Alle nummers uit je gekozen genres zijn deze sessie gespeeld. We gaan verder met het meest verwante genre met beschikbare nummers.');
+      }
+
       if (expandToFreshGenre(historySet)) continue;
 
-      const globallyFresh = freshFrom(sourceTracks, historySet);
-      if (globallyFresh.length) {
-        tracks = mergeTracks(tracks, globallyFresh);
+      const remainingGlobalFresh = freshFrom(sourceTracks, historySet);
+      if (remainingGlobalFresh.length) {
+        tracks = mergeTracks(tracks, remainingGlobalFresh);
         updateCount();
-        showSessionNotice('De gekozen genres zijn volledig gespeeld. We gaan verder met overige nog niet afgespeelde nummers uit de muziekbibliotheek.');
+        showSessionNotice('De huidige genres hebben geen nog nooit afgespeelde nummers meer. We gaan verder met overige nieuwe nummers uit de muziekbibliotheek.');
         continue;
       }
 
