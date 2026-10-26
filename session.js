@@ -238,12 +238,22 @@
   async function prepareRepeatTrack() {
     while (true) {
       const history = readHistory();
+      const historySet = new Set(history);
       const recent100 = new Set(history.slice(-100));
       const primaryPool = tracksForGenres(selectedGenres);
-      // Na volledige bibliotheek-uitputting blijven de oorspronkelijk gekozen
-      // genres leidend. Binnen die genres telt alleen of een nummer in deze
-      // sessie al gespeeld is; de laatste-100-regel geldt hier niet.
-      const primaryCandidates = repeatCandidatesFrom(primaryPool, new Set());
+
+      // Binnen de gekozen genres hebben nummers die nog nooit in de globale
+      // afspeelgeschiedenis staan altijd absolute voorrang. Pas daarna komen
+      // eerder gespeelde nummers aan bod. Binnen de gekozen genres geldt de
+      // laatste-100-regel niet; wel mag een nummer maar één keer per sessie.
+      const primaryFresh = shuffle(primaryPool.filter(track =>
+        !used.has(key(track)) &&
+        !unavailable.has(key(track)) &&
+        !historySet.has(key(track))
+      ));
+      const primaryCandidates = primaryFresh.length
+        ? primaryFresh
+        : repeatCandidatesFrom(primaryPool, new Set());
 
       if (primaryCandidates.length) {
         if (repeatSource && repeatSource !== 'primary') {
