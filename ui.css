@@ -782,6 +782,9 @@ body.landing-page {
   color: var(--text);
   border: 1px solid #4b5543;
 }
+.landing-page .connection-card.issue .connection-manage-button {
+  grid-column: 1 / -1;
+}
 .landing-page .connection-disconnect-button {
   background: transparent;
   color: #b7beae;
