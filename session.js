@@ -225,11 +225,10 @@
     throw error;
   }
   function renderTrack(spotifyTrack, sourceTrack, revealArtwork = false) {
-    const spotifyLink = $('#spotifyTrackLink');
-    const albumId = spotifyTrack.album?.id || spotifyTrack.album?.uri?.match(/^spotify:album:([A-Za-z0-9]+)$/)?.[1];
-    spotifyLink.href = albumId ? `https://open.spotify.com/album/${encodeURIComponent(albumId)}` : '#';
-    spotifyLink.hidden = true;
-    spotifyLink.dataset.available = String(Boolean(albumId));
+    const genreElement = $('#trackGenres');
+    const labels = allGenreKeys.filter(genre => genresOf(sourceTrack).includes(genre)).map(genre => genreNames[genre]);
+    genreElement.textContent = labels.length ? `${labels.length === 1 ? 'Genre' : 'Genres'}: ${labels.join(' · ')}` : '';
+    genreElement.hidden = true;
 
     $('#trackTitle').textContent = sourceTrack.title;
     const artistElement = $('#trackArtist');
@@ -851,7 +850,7 @@
     window.location.assign('index.html');
   }
   function requestSessionExit() { if (!used.size) { leaveSession(); return; } const dialog = $('#exitDialog'); if (typeof dialog.showModal === 'function') dialog.showModal(); else if (window.confirm('Weet je zeker dat je deze sessie wilt verlaten?')) leaveSession(); }
-  $('#revealButton').addEventListener('click', () => { if (!currentTrack) return; const hasArtwork = $('#albumArt').dataset.available === 'true'; $('#albumArt').hidden = !hasArtwork; $('#albumFallback').hidden = hasArtwork; $('.player-card').classList.remove('track-concealed'); $('#revealButton').hidden = true; $('#spotifyTrackLink').hidden = $('#spotifyTrackLink').dataset.available !== 'true'; }); $('#retryPlayer').addEventListener('click',()=>guarded(preparePlayer)); $('#startPlayback').addEventListener('click', () => guarded(playPending)); $('#pauseButton').addEventListener('click', () => guarded(togglePause)); $('#nextButton').addEventListener('click', () => guarded(nextTrackFromButton)); $('.back-button').addEventListener('click', event => { event.preventDefault(); requestSessionExit(); }); $('#endSession').addEventListener('click', requestSessionExit); $('#cancelExit').addEventListener('click', () => $('#exitDialog').close()); $('#confirmExit').addEventListener('click', leaveSession);
+  $('#revealButton').addEventListener('click', () => { if (!currentTrack) return; const hasArtwork = $('#albumArt').dataset.available === 'true'; $('#albumArt').hidden = !hasArtwork; $('#albumFallback').hidden = hasArtwork; $('.player-card').classList.remove('track-concealed'); $('#revealButton').hidden = true; $('#trackGenres').hidden = !$('#trackGenres').textContent; }); $('#retryPlayer').addEventListener('click',()=>guarded(preparePlayer)); $('#startPlayback').addEventListener('click', () => guarded(playPending)); $('#pauseButton').addEventListener('click', () => guarded(togglePause)); $('#nextButton').addEventListener('click', () => guarded(nextTrackFromButton)); $('.back-button').addEventListener('click', event => { event.preventDefault(); requestSessionExit(); }); $('#endSession').addEventListener('click', requestSessionExit); $('#cancelExit').addEventListener('click', () => $('#exitDialog').close()); $('#confirmExit').addEventListener('click', leaveSession);
   (async()=>{
     if (!selectedGenres.length || !window.SpotifyApp.hasSession() || !window.SpotifyApp.hasRequiredScopes()) { window.location.replace('index.html'); return; }
     $('#sessionTitle').innerHTML = `${sessionGenreLabel()}<span>.</span>`;

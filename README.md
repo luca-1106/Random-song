@@ -2,7 +2,7 @@
 
 Een mobiele Spotify-randomizer. Kies een genre, koppel je eigen Spotify-account en start een sessie. De app speelt uitsluitend nummers uit het gekozen genre en herhaalt binnen die sessie geen nummer.
 
-Titel, artiest, albumhoes en een link naar Spotify zijn zichtbaar tijdens het afspelen. Dat is nodig voor een Spotify-streamingintegratie.
+Na het onthullen toont de app de titel, artiest, het jaartal, de albumhoes en alle genres die aan het nummer in de muziekbibliotheek zijn gekoppeld.
 
 ## Voor je publiceert
 

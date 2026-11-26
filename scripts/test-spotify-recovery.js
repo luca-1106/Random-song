@@ -149,11 +149,11 @@ async function suite(files) {
     const document={querySelector:s=>elements.get(s)||null,querySelectorAll:()=>[],addEventListener(){},createElement:()=>node("script"),head:{appendChild(){}}};
     return {document,elements,$:s=>{const el=elements.get(s);if(!el)throw Error("Missing element "+s);return el;}};
   }
-  function session({stall=false}={}){
+  function session({stall=false,genres=["rock"]}={}){
     const ui=dom(files["session.html"]),localStorage=store(),sessionStorage=store({"muziekmix.session.genres":'["rock"]'});
     let currentSdk=null,failPlay=false,blockReady=stall,redirect="",playState=null;
     const calls=[],instances=[];
-    const tracks=[1,2,3].map(n=>({title:"Song "+n,artist:"Artist",year:2000,genres:["rock"],spotifyUri:"spotify:track:track"+n}));
+    const tracks=[1,2,3].map(n=>({title:"Song "+n,artist:"Artist",year:2000,genres,spotifyUri:"spotify:track:track"+n}));
     const window={TRACKS:tracks,location:{replace:u=>redirect=u,assign:u=>redirect=u},SpotifyApp:{hasSession:()=>true,hasRequiredScopes:()=>true,profile:async()=>({id:"user"}),token:async()=>"token",request:async(path,method,body)=>{
       if(path.startsWith("/tracks/"))return {uri:"spotify:track:"+path.split("/").pop(),name:"Song",artists:[{name:"Artist"}],album:{id:"album",images:[]},duration_ms:180000};
       if(path.startsWith("/me/player/play")){
@@ -187,6 +187,26 @@ async function suite(files) {
     const last=h.calls.at(-1);h.sdk().emit("not_ready");await flush();ok(h.$("#nextButton").disabled,"disconnected next allowed");ok(!h.$("#retryPlayer").hidden,"retry missing");
     await h.$("#retryPlayer").fire();await flush();equal(h.instances.length,2,"player not replaced");ok(!h.$("#pauseButton").disabled,"resume unavailable");
     await h.$("#pauseButton").fire();await flush();equal(h.calls.at(-1),last,"resume changed song");equal(h.played().length,2,"resume changed unique history");equal(h.recent().length,2,"resume counted as new song");
+  });
+  await test("Track genres stay hidden until reveal and reset on next track",async()=>{
+    for(const [genres,expected] of [
+      [["rock"],"Genre: Rock"],
+      [["rock","pop","rock","alles","unknown"],"Genres: Pop · Rock"]
+    ]){
+      const h=session({genres});await flush();
+      const label=h.$("#trackGenres");
+      ok(label.hidden,"genre visible before first playback");
+      await h.$("#startPlayback").fire();await flush();
+      ok(label.hidden,"genre visible before reveal");
+      equal(label.textContent,expected,"wrong catalog genres");
+      await h.$("#revealButton").fire();await flush();
+      ok(!label.hidden,"genre missing after reveal");
+      await h.$("#nextButton").fire();await flush();
+      ok(label.hidden,"genre visible on next concealed track");
+      await h.$("#revealButton").fire();await flush();
+      equal(label.textContent,expected,"next genre incorrect");ok(!label.hidden,"next genre not revealed");
+      ok(!h.elements.has("#spotifyTrackLink"),"obsolete link remains");
+    }
   });
   await test("Player initialization timeout is recoverable",async()=>{
     const h=session({stall:true});await flush();ok(!h.$("#retryPlayer").hidden,"timeout missing retry");ok(h.$("#startPlayback").disabled,"unready play enabled");ok(h.instances[0].disconnected,"stalled player not disconnected");

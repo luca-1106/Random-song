@@ -460,39 +460,32 @@ body.session-page {
 }
 
 
-/* Link naar de exacte Spotify-track, uitsluitend na onthullen. */
-.session-page .spotify-track-link {
+/* Genres uit de muziekbibliotheek, uitsluitend na onthullen. */
+.session-page .track-genres {
   display: block;
-  position: static;
-  width: max-content;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   justify-self: center;
-  margin: clamp(18px, 3dvh, 32px) auto 0;
-  text-align: center;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
+  margin: clamp(8px, 2dvh, 20px) auto 0;
+  padding: 0 4px;
   color: var(--lime);
   font-size: clamp(11px, 3vw, 13px);
   font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  line-height: 1.3;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
-.session-page .spotify-track-link:hover { color: #e2ffad; }
-.session-page .spotify-track-link:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
-.session-page .spotify-track-link[hidden],
-.session-page .player-card.track-concealed .spotify-track-link { display: none !important; }
+.session-page .track-genres[hidden],
+.session-page .player-card.track-concealed .track-genres { display: none !important; }
 
-/* Laat de Spotify-link automatisch meeschuiven met één- of tweeregelige titels. */
+/* Laat de genres automatisch meeschuiven met één- of tweeregelige titels. */
 .session-page .track-display { position: relative; }
 .session-page .player-card:not(.track-concealed) .now-playing { transform: none; }
 .session-page .player-card:not(.track-concealed) .track-display { transform: translateY(-2dvh); }
 @media (max-height: 700px) {
-  .session-page .spotify-track-link { margin-top: clamp(12px, 2dvh, 20px); }
+  .session-page .track-genres { margin-top: 4px; }
 }
-
 
 /* Tijdelijke melding wanneer de sessie automatisch naar een ander genre overschakelt. */
 .session-page .session-notice {
