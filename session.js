@@ -131,6 +131,7 @@
   let selectedHistoryChoice = startedWithNoFreshSelected ? 'stay' : '';
   let noticeTimer;
   let actionInProgress = false;
+  let spotifyAccessLossHandled = false;
   const spotifyIssueStorageKey = 'muziekmix.spotify.connectionIssue';
   let player, browserDeviceId = '', pendingTrack, currentTrack, playerState, stateUpdatedAt = 0, used = new Set(), unavailable = new Set(), isPlaying = false, progressTimer;
 
@@ -545,6 +546,8 @@
     error?.code === 'SPOTIFY_ACCESS_INVALID' || error?.code === 'SPOTIFY_SESSION_EXPIRED';
 
   function handleSpotifyAccessLoss() {
+    if (spotifyAccessLossHandled) return;
+    spotifyAccessLossHandled = true;
     try { sessionStorage.setItem(spotifyIssueStorageKey, 'access'); } catch (_) {}
     try { player?.pause?.().catch(() => {}); } catch (_) {}
     try { player?.disconnect?.(); } catch (_) {}
