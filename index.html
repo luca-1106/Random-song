@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#121411"><meta name="description" content="Start een Spotify-sessie per muziekgenre.">
-  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=spotify-own-app-2">
+  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=spotify-workflow-1">
 </head>
 <body class="landing-page">
   <main class="app-shell">
@@ -42,30 +42,54 @@
         <button id="closeSpotifySetup" class="spotify-setup-close" type="button" aria-label="Sluiten">×</button>
       </div>
 
+      <p class="spotify-choice-help"><strong>Weet je dat je toegang hebt tot de bestaande Muziekmix-koppeling?</strong> Gebruik dan de eerste knop. Is dat niet bij je bekend? Koppel dan je eigen Spotify Developer-app via de stappen hieronder.</p>
+
       <button id="useDefaultSpotifyApp" class="spotify-setup-option" type="button">
-        <strong>Bestaande koppeling gebruiken</strong>
-        <span>Alleen geschikt als jouw Spotify-account toegang heeft tot de Developer-app van Muziekmix.</span>
+        <strong>Bestaande Muziekmix-koppeling gebruiken</strong>
+        <span>Alleen gebruiken als je weet dat jouw Spotify-account hiervoor toegang heeft.</span>
       </button>
 
-      <div class="spotify-setup-divider"><span>of</span></div>
+      <div class="spotify-setup-divider"><span>eigen koppeling</span></div>
 
       <section class="spotify-custom-app">
-        <h3>Eigen Spotify Developer-app</h3>
-        <p>Maak in Spotify for Developers je eigen app, voeg onderstaande Redirect URI exact toe en vul daarna alleen je Client ID in. De eigenaar van een Development Mode-app moet Spotify Premium hebben; nieuwe apps ondersteunen maximaal 5 gebruikers. Deel hier nooit een Client Secret.</p>
+        <h3>Eigen Spotify Developer-app koppelen</h3>
+        <p class="spotify-custom-intro">Je hebt hiervoor Spotify Premium nodig. Je vult in Muziekmix alleen je <strong>Client ID</strong> in — nooit een Client Secret.</p>
 
-        <label class="spotify-setup-label" for="spotifyRedirectUri">Redirect URI</label>
-        <div class="spotify-copy-row">
-          <input id="spotifyRedirectUri" class="spotify-setup-input" type="text" readonly>
-          <button id="copySpotifyRedirect" class="secondary-button compact-button" type="button">Kopieer</button>
-        </div>
+        <ol class="spotify-setup-steps">
+          <li>
+            <div>
+              <strong>Open Spotify for Developers</strong>
+              <span>Maak daar een nieuwe app aan of open je bestaande app.</span>
+            </div>
+            <a class="spotify-developer-link spotify-step-action" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Open Dashboard</a>
+          </li>
+          <li>
+            <div>
+              <strong>Voeg deze Redirect URI exact toe</strong>
+              <span>Kopieer hem hieronder en plak hem bij de Redirect URI's van je Spotify-app.</span>
+            </div>
+            <div class="spotify-copy-row">
+              <input id="spotifyRedirectUri" class="spotify-setup-input" type="text" readonly aria-label="Redirect URI">
+              <button id="copySpotifyRedirect" class="secondary-button compact-button" type="button">Kopieer</button>
+            </div>
+          </li>
+          <li>
+            <div>
+              <strong>Kopieer je Client ID</strong>
+              <span>Je vindt de Client ID in je Spotify Developer-app. Plak hem hieronder.</span>
+            </div>
+            <input id="spotifyClientIdInput" class="spotify-setup-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak hier je Client ID" aria-label="Spotify Client ID">
+          </li>
+          <li>
+            <div>
+              <strong>Koppel Spotify</strong>
+              <span>Muziekmix opent Spotify. Log daar in met het Spotify-account waarmee je wilt spelen.</span>
+            </div>
+            <button id="connectCustomSpotifyApp" class="primary-button full-button" type="button">Opslaan en Spotify koppelen</button>
+          </li>
+        </ol>
 
-        <a class="spotify-developer-link" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Open Spotify Developer Dashboard</a>
-
-        <label class="spotify-setup-label" for="spotifyClientIdInput">Client ID</label>
-        <input id="spotifyClientIdInput" class="spotify-setup-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak je Spotify Client ID">
-
-        <button id="connectCustomSpotifyApp" class="primary-button full-button" type="button">Developer-app opslaan en Spotify koppelen</button>
-        <p class="spotify-setup-note">Je Client ID wordt alleen lokaal in deze browser opgeslagen. Een Client ID is openbaar; een Client Secret hoort nooit in deze app.</p>
+        <p class="spotify-setup-note">Je Client ID wordt alleen in deze browser opgeslagen. Een Client ID mag openbaar zijn; een Client Secret niet.</p>
       </section>
     </div>
   </dialog>
