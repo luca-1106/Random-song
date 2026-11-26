@@ -1,284 +1,194 @@
 (() => {
   'use strict';
-
-  const defaultClientId = (window.APP_CONFIG?.spotifyClientId || '').trim();
+  const config = window.APP_CONFIG || {};
+  const defaultClientId = String(config.spotifyClientId || '').trim();
   const placeholder = 'PASTE_YOUR_SPOTIFY_CLIENT_ID_HERE';
-  const authVersion = String(window.APP_CONFIG?.spotifyAuthVersion || '1');
-  const redirectUri = (window.APP_CONFIG?.spotifyRedirectUri || `${window.location.origin}${window.location.pathname}`).trim();
+  const authVersion = String(config.spotifyAuthVersion || '1');
+  const redirectUri = String(config.spotifyRedirectUri || location.origin + location.pathname).trim();
+  const prefix = 'muziekmix.spotify.';
+  const keys = Object.fromEntries(['access','expiry','refresh','verifier','state','scope','authVersion','customClientId','clientMode','clientSource','connectionIssue'].map(k => [k, prefix + k]));
+  keys.sessionClient = prefix + 'sessionClientId';
+  keys.authClient = prefix + 'authClientId';
+  const pendingKey = prefix + 'pendingAuthorization.v2';
+  const requiredScopes = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state';
+  const get = k => localStorage.getItem(k) || '';
+  const put = (k,v) => localStorage.setItem(k,String(v));
+  const remove = k => localStorage.removeItem(k);
+  const coded = (message, code, details = {}) => Object.assign(new Error(message), {code}, details);
+  const validClient = v => /^[A-Za-z0-9]{20,128}$/.test(v) && v !== placeholder;
+  const storedCustom = () => get(keys.customClientId).trim();
+  const clientMode = () => get(keys.clientMode) === 'custom' && storedCustom() ? 'custom' : 'default';
+  const clientSource = () => clientMode() === 'default' ? 'default' : get(keys.clientSource) === 'shared' ? 'shared' : 'own';
+  const currentClientId = () => clientMode() === 'custom' ? storedCustom() : defaultClientId;
+  const hasSession = () => Boolean(get(keys.access) || get(keys.refresh));
+  const connectionIssue = () => get(keys.connectionIssue);
+  const hasRequiredScopes = () => requiredScopes.split(' ').every(scope => get(keys.scope).split(/\s+/).includes(scope));
+  let generation = 0;
+  let refreshJob = null;
 
-  const authVersionKey = 'muziekmix.spotify.authVersion';
-  const customClientIdKey = 'muziekmix.spotify.customClientId';
-  const clientModeKey = 'muziekmix.spotify.clientMode';
-  const clientSourceKey = 'muziekmix.spotify.clientSource';
-  const keys = {
-    access: 'muziekmix.spotify.access',
-    expiry: 'muziekmix.spotify.expiry',
-    refresh: 'muziekmix.spotify.refresh',
-    verifier: 'muziekmix.spotify.verifier',
-    state: 'muziekmix.spotify.state',
-    authClient: 'muziekmix.spotify.authClientId',
-    sessionClient: 'muziekmix.spotify.sessionClientId'
-  };
-
-  let accessToken = localStorage.getItem(keys.access) || '';
-  let tokenExpiry = Number(localStorage.getItem(keys.expiry) || 0);
-  let refreshToken = localStorage.getItem(keys.refresh) || '';
-
-  const base64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-  const random = length => base64url(crypto.getRandomValues(new Uint8Array(length)));
-  const digest = value => crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  const codedError = (message, code) => {
-    const error = new Error(message);
-    error.code = code;
-    return error;
-  };
-
-  const storedCustomClientId = () => (localStorage.getItem(customClientIdKey) || '').trim();
-  const clientMode = () => localStorage.getItem(clientModeKey) === 'custom' && storedCustomClientId() ? 'custom' : 'default';
-  const clientSource = () => {
-    if (clientMode() !== 'custom') return 'default';
-    return localStorage.getItem(clientSourceKey) === 'shared' ? 'shared' : 'own';
-  };
-  const currentClientId = () => clientMode() === 'custom' ? storedCustomClientId() : defaultClientId;
-
-  function clearAuthState() {
-    [keys.access, keys.expiry, keys.refresh, keys.verifier, keys.state, keys.authClient, keys.sessionClient]
-      .forEach(key => localStorage.removeItem(key));
-    accessToken = '';
-    tokenExpiry = 0;
-    refreshToken = '';
+  function clearTokens() {
+    generation++;
+    refreshJob = null;
+    [keys.access,keys.expiry,keys.refresh,keys.scope,keys.sessionClient].forEach(remove);
   }
-
+  function clearPending() {
+    sessionStorage.removeItem(pendingKey);
+    [keys.verifier,keys.state,keys.authClient].forEach(remove);
+  }
   function clear() {
-    clearAuthState();
+    clearTokens();
+    clearPending();
+    remove(keys.connectionIssue);
   }
-
-  function setCustomClientId(value, source = 'own') {
-    const next = String(value || '').trim();
-    if (!/^[A-Za-z0-9]{20,128}$/.test(next)) {
-      throw new Error('Vul een geldige Spotify Client ID in.');
-    }
-    const normalizedSource = source === 'shared' ? 'shared' : 'own';
-    const changed = clientMode() !== 'custom' || currentClientId() !== next;
-    if (changed) clearAuthState();
-    localStorage.setItem(customClientIdKey, next);
-    localStorage.setItem(clientModeKey, 'custom');
-    localStorage.setItem(clientSourceKey, normalizedSource);
-    return next;
+  function invalidate(code, message) {
+    clearTokens();
+    put(keys.connectionIssue, code === 'SPOTIFY_ACCESS_INVALID' ? 'access' : 'expired');
+    return coded(message, code);
   }
-
-  function useDefaultClientId() {
-    const changed = clientMode() !== 'default';
-    if (changed) clearAuthState();
-    localStorage.setItem(clientModeKey, 'default');
-    localStorage.setItem(clientSourceKey, 'default');
+  if (get(keys.authVersion) !== authVersion) {
+    if (hasSession()) invalidate('SPOTIFY_SESSION_EXPIRED','Log opnieuw in bij Spotify.');
+    clearPending();
+    put(keys.authVersion, authVersion);
   }
-
-  if (localStorage.getItem(authVersionKey) !== authVersion) {
-    clearAuthState();
-    // Markeer de migratie vóór OAuth start, anders kan de redirect de PKCE-state wissen.
-    localStorage.setItem(authVersionKey, authVersion);
+  function commitSource(source, id) {
+    if (source !== 'default') put(keys.customClientId,id);
+    put(keys.clientMode,source === 'default' ? 'default' : 'custom');
+    put(keys.clientSource,source);
   }
-
-  function save(data, clientId) {
-    accessToken = data.access_token;
-    tokenExpiry = Date.now() + Number(data.expires_in || 3600) * 1000;
-    localStorage.setItem(keys.access, accessToken);
-    localStorage.setItem(keys.expiry, String(tokenExpiry));
-    localStorage.setItem(keys.sessionClient, clientId);
-    localStorage.setItem(authVersionKey, authVersion);
-    if (data.refresh_token) {
-      refreshToken = data.refresh_token;
-      localStorage.setItem(keys.refresh, refreshToken);
-    }
+  function save(data, clientId, newLogin = false) {
+    if (!data?.access_token) throw coded('Spotify gaf geen geldig toegangstoken terug.','SPOTIFY_TEMPORARY');
+    put(keys.access,data.access_token);
+    put(keys.expiry,Date.now() + Number(data.expires_in || 3600)*1000);
+    put(keys.sessionClient,clientId);
+    if (data.refresh_token) put(keys.refresh,data.refresh_token);
+    else if (newLogin) remove(keys.refresh);
+    if (typeof data.scope === 'string') put(keys.scope,data.scope);
+    else if (newLogin) put(keys.scope,requiredScopes);
   }
-
+  const base64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');
+  const random = length => base64url(crypto.getRandomValues(new Uint8Array(length)));
+  async function fetchTimed(url, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try { return await fetch(url,{...options,signal:controller.signal}); }
+    catch (_) { throw coded('Spotify is tijdelijk niet bereikbaar. Probeer opnieuw.','SPOTIFY_TEMPORARY'); }
+    finally { clearTimeout(timer); }
+  }
   async function tokenRequest(values) {
-    const response = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(values)
+    const response = await fetchTimed('https://accounts.spotify.com/api/token',{
+      method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values)
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error_description || 'Spotify-aanmelding is mislukt.');
+    const data = await response.json().catch(()=>({}));
+    if (!response.ok) throw coded(data.error_description || 'Spotify-aanmelding mislukt.', 'SPOTIFY_TOKEN_ERROR',{status:response.status,reason:data.error});
     return data;
   }
-
-  async function token() {
+  async function token(force = false) {
     const clientId = currentClientId();
-    if (!clientId || clientId === placeholder) throw new Error('Kies eerst een geldige Spotify Developer-app.');
-
-    const storedSessionClient = localStorage.getItem(keys.sessionClient);
-    if ((accessToken || refreshToken) && storedSessionClient && storedSessionClient !== clientId) {
-      clearAuthState();
-      throw new Error('De Spotify Developer-app is gewijzigd. Koppel je Spotify-account opnieuw.');
-    }
-
-    if (accessToken && Date.now() < tokenExpiry - 60_000) return accessToken;
-    if (!refreshToken) throw new Error('Koppel eerst je Spotify-account.');
-
-    try {
-      save(await tokenRequest({
-        client_id: clientId,
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken
-      }), clientId);
-      return accessToken;
-    } catch (error) {
-      // Een netwerkfout mag een geldige koppeling niet wissen.
-      if (error instanceof TypeError) {
-        throw new Error('Spotify kon tijdelijk niet worden bereikt. Probeer het opnieuw.');
-      }
-      clearAuthState();
-      throw codedError('Je Spotify-sessie is verlopen of ingetrokken. Koppel je account opnieuw.', 'SPOTIFY_SESSION_EXPIRED');
-    }
+    if (!validClient(clientId)) throw coded('Kies een geldige Developer-koppeling.','SPOTIFY_CONFIGURATION');
+    const stored = get(keys.sessionClient);
+    if (hasSession() && stored && stored !== clientId) throw invalidate('SPOTIFY_SESSION_EXPIRED','De Developer-koppeling is gewijzigd. Log opnieuw in.');
+    if (!force && get(keys.access) && Date.now() < Number(get(keys.expiry))-60000) return get(keys.access);
+    if (!get(keys.refresh)) throw invalidate('SPOTIFY_SESSION_EXPIRED','Log opnieuw in bij Spotify.');
+    const refresh = get(keys.refresh);
+    if (refreshJob?.clientId === clientId && refreshJob.refresh === refresh) return refreshJob.promise;
+    const epoch = generation;
+    const stillCurrent = () => epoch === generation && clientId === currentClientId() && refresh === get(keys.refresh);
+    const job = {clientId,refresh};
+    job.promise = (async()=>{
+      try {
+        const data = await tokenRequest({client_id:clientId,grant_type:'refresh_token',refresh_token:refresh});
+        if (!stillCurrent()) throw coded('De Spotify-aanmelding is ondertussen gewijzigd.','SPOTIFY_TEMPORARY');
+        save(data,clientId);
+        return get(keys.access);
+      } catch(error) {
+        if (!stillCurrent()) throw error;
+        if (error.status === 400 && error.reason === 'invalid_grant') throw invalidate('SPOTIFY_SESSION_EXPIRED','Je Spotify-aanmelding is verlopen of ingetrokken. Log opnieuw in.');
+        if (['invalid_client','unauthorized_client'].includes(error.reason) && [400,401,403].includes(error.status)) throw invalidate('SPOTIFY_ACCESS_INVALID','Spotify accepteert deze Developer-koppeling niet. Controleer de instellingen.');
+        throw coded('Spotify kon je aanmelding tijdelijk niet vernieuwen. Probeer opnieuw.','SPOTIFY_TEMPORARY',{status:error.status});
+      } finally { if (refreshJob === job) refreshJob = null; }
+    })();
+    refreshJob = job;
+    return job.promise;
   }
-
-  async function request(path, method = 'GET', body, retry = true) {
-    const response = await fetch(`https://api.spotify.com/v1${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${await token()}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {})
-      },
-      ...(body ? { body: JSON.stringify(body) } : {})
+  async function api(path, method, body, bearer) {
+    const response = await fetchTimed('https://api.spotify.com/v1'+path,{
+      method,headers:{Authorization:'Bearer '+bearer,...(body ? {'Content-Type':'application/json'} : {})},...(body ? {body:JSON.stringify(body)} : {})
     });
-
-    if (response.status === 204) return null;
-    const data = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      if (retry) {
-        tokenExpiry = 0;
-        return request(path, method, body, false);
-      }
-      clearAuthState();
-      throw codedError('Je Spotify-sessie is verlopen. Log opnieuw in bij Spotify.', 'SPOTIFY_SESSION_EXPIRED');
-    }
-    if (!response.ok) {
-      if (response.status === 404) throw new Error('Geen actief Spotify-apparaat gevonden. Open Spotify op je telefoon of speaker en speel daar kort iets af.');
-      if (response.status === 403) {
-        const reason = String(data.error?.reason || '').toUpperCase();
-        const message = data.error?.message || 'Spotify heeft deze actie geweigerd.';
-
-        // Alleen een geweigerd profielverzoek bewijst dat de OAuth/allowlist
-        // zelf niet meer geldig is. Player-403's kunnen ook ontstaan door
-        // device-, Premium- of tijdelijke playbackrestricties.
-        if (path === '/me' && method === 'GET') {
-          clearAuthState();
-          throw codedError(
-            'Spotify weigert toegang tot deze Developer-koppeling. Controleer of dit account nog toegang heeft.',
-            'SPOTIFY_ACCESS_INVALID'
-          );
-        }
-
-        if (path.startsWith('/me/player')) {
-          const error = codedError(
-            reason === 'PREMIUM_REQUIRED'
-              ? 'Spotify meldt tijdelijk dat Premium vereist is voor afspelen. Je koppeling blijft behouden.'
-              : `Spotify kon de afspeelactie niet uitvoeren: ${message}`,
-            'SPOTIFY_PLAYBACK_FORBIDDEN'
-          );
-          error.reason = reason;
-          throw error;
-        }
-
-        throw codedError(message, 'SPOTIFY_FORBIDDEN');
-      }
-      if (response.status === 429) throw new Error(data.error?.reason === 'QUOTA_EXCEEDED'
-        ? 'De Spotify Developer-app heeft tijdelijk zijn API-quota bereikt.'
-        : 'Spotify ontvangt te veel verzoeken. Wacht even en probeer opnieuw.');
-      throw new Error(data.error?.message || `Spotify-fout (${response.status}).`);
-    }
-    return data;
+    const data = response.status === 204 ? null : await response.json().catch(()=>null);
+    return {response,data};
   }
-
+  async function request(path, method='GET', body) {
+    const clientId = currentClientId(), epoch = generation;
+    const checkCurrent = () => {
+      if (epoch !== generation || clientId !== currentClientId()) throw coded('De Spotify-koppeling is gewijzigd.','SPOTIFY_TEMPORARY');
+    };
+    let bearer = await token();
+    checkCurrent();
+    let result = await api(path,method,body,bearer);
+    checkCurrent();
+    if (result.response.status === 401) {
+      bearer = get(keys.access) !== bearer && get(keys.access) ? await token() : await token(true);
+      checkCurrent();
+      result = await api(path,method,body,bearer);
+      checkCurrent();
+    }
+    const {response,data} = result;
+    if (response.ok) return data;
+    const status = response.status, reason = String(data?.error?.reason || '').toUpperCase();
+    const message = data?.error?.message || 'Spotify weigerde deze actie.';
+    const detail = {status,reason,path:path.split('?')[0]};
+    if (status === 401) throw invalidate('SPOTIFY_SESSION_EXPIRED','Spotify accepteert de vernieuwde aanmelding niet. Log opnieuw in.');
+    if (status === 403) {
+      if (path === '/me' && method === 'GET') throw invalidate('SPOTIFY_ACCESS_INVALID','Spotify weigert toegang tot deze koppeling. Controleer het account en Users Management.');
+      // Een endpoint-specifieke 403 bewijst niet dat de koppeling is ingetrokken.
+      // Controleer het profiel; alleen een bevestigde auth-fout mag tokens wissen.
+      await request('/me');
+      if (path.startsWith('/me/player')) throw coded('Spotify weigert de afspeelactie: '+message,'SPOTIFY_PLAYBACK_FORBIDDEN',detail);
+      throw coded('Spotify weigert deze functie: '+message,'SPOTIFY_FORBIDDEN',detail);
+    }
+    if (status === 404 && path.startsWith('/me/player')) throw coded('Het Spotify-afspeelapparaat is niet beschikbaar. Verbind de speler opnieuw.','SPOTIFY_DEVICE_UNAVAILABLE',detail);
+    if (status === 404 && path.startsWith('/tracks/')) throw coded('Dit nummer is niet beschikbaar.','TRACK_NOT_FOUND',detail);
+    if (status === 429) throw coded('Spotify ontvangt te veel verzoeken. Probeer later opnieuw.','SPOTIFY_RATE_LIMIT',{...detail,retryAfter:response.headers.get('Retry-After')});
+    if (status >= 500) throw coded('Spotify heeft tijdelijk een serverprobleem. Probeer opnieuw.','SPOTIFY_TEMPORARY',detail);
+    throw coded(message,'SPOTIFY_REQUEST_FAILED',detail);
+  }
   async function login(options = {}) {
-    const clientId = currentClientId();
-    const showDialog = Boolean(options.showDialog);
-    if (!clientId || clientId === placeholder) throw new Error('Kies eerst een geldige Spotify Developer-app.');
-
-    const verifier = random(64);
-    const state = random(24);
-    const challenge = base64url(await digest(verifier));
-
-    localStorage.setItem(authVersionKey, authVersion);
-    localStorage.setItem(keys.verifier, verifier);
-    localStorage.setItem(keys.state, state);
-    localStorage.setItem(keys.authClient, clientId);
-
+    const source = options.source || clientSource();
+    if (!['default','own','shared'].includes(source)) throw coded('Ongeldige koppeling.','SPOTIFY_CONFIGURATION');
+    const clientId = source === 'default' ? defaultClientId : String(options.clientId ?? currentClientId()).trim();
+    if (!validClient(clientId)) throw coded('Vul een geldige Spotify Client ID in.','SPOTIFY_CONFIGURATION');
+    const verifier = random(64), state = random(24);
+    const challenge = base64url(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
+    sessionStorage.setItem(pendingKey,JSON.stringify({clientId,source,verifier,state,created:Date.now()}));
     const params = new URLSearchParams({
-      client_id: clientId,
-      response_type: 'code',
-      redirect_uri: redirectUri,
-      code_challenge_method: 'S256',
-      code_challenge: challenge,
-      state,
-      scope: 'streaming user-read-private user-modify-playback-state user-read-playback-state',
-      ...(showDialog ? { show_dialog: 'true' } : {})
+      client_id:clientId,response_type:'code',redirect_uri:redirectUri,code_challenge_method:'S256',code_challenge:challenge,state,scope:requiredScopes,show_dialog:'true'
     });
-
-    window.location.assign(`https://accounts.spotify.com/authorize?${params}`);
+    window.location.assign('https://accounts.spotify.com/authorize?'+params);
   }
-
-  async function reauthorize() {
-    // Forceer een nieuwe Spotify-autorisatie, maar wis de huidige geldige
-    // sessie pas nadat Spotify daadwerkelijk nieuwe tokens teruggeeft.
-    return login({ showDialog: true });
-  }
-
   async function handleCallback() {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const error = params.get('error');
-    if (!code && !error) return null;
-
-    history.replaceState({}, document.title, redirectUri);
-
-    if (error) {
-      localStorage.removeItem(keys.verifier);
-      localStorage.removeItem(keys.state);
-      localStorage.removeItem(keys.authClient);
-      throw new Error(error === 'access_denied' ? 'Spotify-koppeling is geannuleerd.' : `Spotify-koppeling mislukt: ${error}.`);
-    }
-
-    if (!params.get('state') || params.get('state') !== localStorage.getItem(keys.state)) {
-      throw new Error('De Spotify-aanmelding kon niet veilig worden gecontroleerd. Probeer opnieuw.');
-    }
-
-    const verifier = localStorage.getItem(keys.verifier);
-    const authClientId = (localStorage.getItem(keys.authClient) || currentClientId()).trim();
-    if (!verifier) throw new Error('De inlogsessie is verlopen. Probeer Spotify opnieuw te koppelen.');
-    if (!authClientId) throw new Error('De Spotify Client ID voor deze inlogsessie ontbreekt. Start de koppeling opnieuw.');
-
-    save(await tokenRequest({
-      client_id: authClientId,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: verifier
-    }), authClientId);
-
-    localStorage.removeItem(keys.verifier);
-    localStorage.removeItem(keys.state);
-    localStorage.removeItem(keys.authClient);
-    return true;
+    if (!params.has('code') && !params.has('error')) return null;
+    history.replaceState({},document.title,redirectUri);
+    let pending;
+    try { pending = JSON.parse(sessionStorage.getItem(pendingKey) || 'null'); } catch (_) {}
+    // Legacy OAuth in progress is deliberately not accepted after this upgrade.
+    if (!pending || params.get('state') !== pending.state || Date.now()-pending.created > 30*60*1000) throw coded('De Spotify-aanmelding kon niet veilig worden gecontroleerd. Probeer opnieuw.','SPOTIFY_CALLBACK');
+    clearPending();
+    if (params.has('error')) throw coded('Spotify-aanmelding geannuleerd of geweigerd.','SPOTIFY_CALLBACK');
+    const data = await tokenRequest({client_id:pending.clientId,grant_type:'authorization_code',code:params.get('code'),redirect_uri:redirectUri,code_verifier:pending.verifier});
+    if (!data.access_token || !data.refresh_token) throw coded('Spotify gaf geen volledige nieuwe aanmelding terug.','SPOTIFY_CALLBACK');
+    // Verifieer de NIEUWE koppeling vóór de bestaande aanmelding te vervangen.
+    const {response,data:profile} = await api('/me','GET',null,data.access_token);
+    if (!response.ok || !profile?.id) throw coded(response.status === 403 ? 'Dit Spotify-account heeft geen toegang tot de gekozen Developer-koppeling. Controleer Users Management.' : 'De nieuwe Spotify-aanmelding kon niet worden gecontroleerd. Probeer opnieuw.','SPOTIFY_CALLBACK');
+    clearTokens();
+    commitSource(pending.source,pending.clientId);
+    save(data,pending.clientId,true);
+    remove(keys.connectionIssue);
+    return profile;
   }
-
   window.SpotifyApp = {
-    configured: () => Boolean(currentClientId() && currentClientId() !== placeholder),
-    hasSession: () => Boolean(accessToken || refreshToken),
-    clear,
-    login,
-    reauthorize,
-    token,
-    request,
-    handleCallback,
-    profile: () => request('/me'),
-    redirectUri: () => redirectUri,
-    clientMode,
-    clientSource,
-    currentClientId,
-    setCustomClientId,
-    useDefaultClientId
+    configured:()=>validClient(currentClientId()),hasSession,hasRequiredScopes,connectionIssue,clear,login,
+    reauthorize:()=>login(),token,request,handleCallback,profile:()=>request('/me'),
+    redirectUri:()=>redirectUri,clientMode,clientSource,currentClientId
   };
 })();
