@@ -73,7 +73,7 @@
     const sourceLabel = source === 'shared'
       ? 'Via een gedeelde Spotify Developer-koppeling.'
       : source === 'own'
-        ? 'Via je eigen Spotify Developer-app.'
+        ? 'Via je eigen Spotify Developer-koppeling.'
         : 'Via de ingebouwde Muziekmix-koppeling.';
     $('#connectionIcon').classList.toggle('connected', connected);
     $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : 'Spotify niet gekoppeld';
@@ -84,6 +84,22 @@
     $('#connectSpotify').disabled = false;
   }
 
+  function selectSpotifyPath(path = '') {
+    const shared = path === 'shared';
+    const own = path === 'own';
+    const sharedToggle = $('#spotifySharedPathToggle');
+    const ownToggle = $('#spotifyOwnPathToggle');
+    const sharedPanel = $('#spotifySharedPathPanel');
+    const ownPanel = $('#spotifyOwnPathPanel');
+
+    sharedToggle.setAttribute('aria-expanded', String(shared));
+    ownToggle.setAttribute('aria-expanded', String(own));
+    sharedToggle.classList.toggle('selected', shared);
+    ownToggle.classList.toggle('selected', own);
+    sharedPanel.hidden = !shared;
+    ownPanel.hidden = !own;
+  }
+
   function openSpotifySetup() {
     const dialog = $('#spotifySetupDialog');
     if (!dialog) return;
@@ -92,6 +108,15 @@
     const currentClientId = window.SpotifyApp.currentClientId?.() || '';
     $('#spotifyClientIdInput').value = source === 'own' ? currentClientId : '';
     $('#sharedSpotifyClientIdInput').value = source === 'shared' ? currentClientId : '';
+
+    if (window.SpotifyApp.hasSession()) {
+      selectSpotifyPath(source === 'own' ? 'own' : 'shared');
+    } else if (source === 'own' || source === 'shared') {
+      selectSpotifyPath(source);
+    } else {
+      selectSpotifyPath('');
+    }
+
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   }
@@ -203,6 +228,8 @@
 
   $('#connectSpotify').addEventListener('click', openSpotifySetup);
   $('#manageSpotify').addEventListener('click', openSpotifySetup);
+  $('#spotifySharedPathToggle').addEventListener('click', () => selectSpotifyPath('shared'));
+  $('#spotifyOwnPathToggle').addEventListener('click', () => selectSpotifyPath('own'));
   $('#closeSpotifySetup').addEventListener('click', closeSpotifySetup);
   $('#spotifySetupDialog').addEventListener('cancel', event => {
     event.preventDefault();
