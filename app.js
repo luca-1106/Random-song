@@ -329,6 +329,9 @@
   $('#connectSpotify').addEventListener('click', openSpotifySetup);
   $('#manageSpotify').addEventListener('click', openSpotifySetup);
   $('#reauthorizeSpotify').addEventListener('click', () => guarded(async () => {
+    if (spotifyConnectionIssue) {
+      try { sessionStorage.setItem(spotifyIssueStorageKey, spotifyConnectionIssue); } catch (_) {}
+    }
     closeSpotifySetup();
     await window.SpotifyApp.reauthorize();
   }));
