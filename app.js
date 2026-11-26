@@ -8,6 +8,9 @@
   const libraryKeys = new Set(uniqueTracks(tracks).map(trackKey));
   let selectedGenres = ['alles'];
   let actionInProgress = false;
+  let spotifyConnectionIssue = '';
+  let spotifyProfileName = '';
+  const spotifyIssueStorageKey = 'muziekmix.spotify.connectionIssue';
   const historyStorageKey = 'muziekmix.playedHistory.v1';
   const recentHistoryStorageKey = 'muziekmix.recentPlaybackHistory.v1';
   const readHistory = () => {
@@ -67,21 +70,90 @@
     $('#genreToggle').setAttribute('aria-expanded', 'false');
   }
 
-  function renderConnection(profile) {
-    const connected = Boolean(profile);
+  const spotifySourceLabel = source => source === 'shared'
+    ? 'Gedeelde Developer-koppeling'
+    : source === 'own'
+      ? 'Eigen Developer-koppeling'
+      : 'Ingebouwde Muziekmix-koppeling';
+
+  const setBadge = (element, visible, text = 'Actief', issue = false) => {
+    if (!element) return;
+    element.hidden = !visible;
+    element.textContent = text;
+    element.classList.toggle('issue', issue);
+  };
+
+  function updateSpotifyManagementState() {
     const source = window.SpotifyApp.clientSource?.() || 'default';
-    const sourceLabel = source === 'shared'
-      ? 'Via een gedeelde Spotify Developer-koppeling.'
-      : source === 'own'
-        ? 'Via je eigen Spotify Developer-koppeling.'
-        : 'Via de ingebouwde Muziekmix-koppeling.';
+    const active = window.SpotifyApp.hasSession() && !spotifyConnectionIssue;
+    const issue = Boolean(spotifyConnectionIssue);
+    const relevant = active || issue;
+    const sharedPath = source !== 'own';
+
+    const current = $('#spotifyCurrentConnection');
+    current.hidden = !relevant;
+    current.classList.toggle('issue', issue);
+    if (relevant) {
+      $('#spotifyCurrentConnectionEyebrow').textContent = issue ? 'Aandacht nodig' : 'Huidige koppeling';
+      $('#spotifyCurrentConnectionLabel').textContent = spotifySourceLabel(source);
+      $('#spotifyCurrentConnectionAccount').textContent = issue
+        ? 'De Spotify-toegang is niet meer geldig. Kies opnieuw of herstel deze koppeling.'
+        : (spotifyProfileName ? `Gekoppeld als ${spotifyProfileName}` : 'Spotify is gekoppeld.');
+    }
+
+    const badgeText = issue ? 'Herstellen' : 'Actief';
+    setBadge($('#spotifySharedPathActiveBadge'), relevant && sharedPath, badgeText, issue);
+    setBadge($('#spotifyOwnPathActiveBadge'), relevant && !sharedPath, badgeText, issue);
+    setBadge($('#spotifySharedClientActiveBadge'), relevant && source === 'shared', badgeText, issue);
+    setBadge($('#spotifyDefaultClientActiveBadge'), relevant && source === 'default', badgeText, issue);
+
+    $('#spotifySharedPathToggle').classList.toggle('active-connection', relevant && sharedPath);
+    $('#spotifyOwnPathToggle').classList.toggle('active-connection', relevant && !sharedPath);
+    $('#spotifySharedClientCard').classList.toggle('active-connection', relevant && source === 'shared');
+    $('#spotifyDefaultClientCard').classList.toggle('active-connection', relevant && source === 'default');
+
+    $('#connectSharedSpotifyApp').textContent = source === 'shared' && relevant
+      ? (issue ? 'Deze koppeling herstellen' : 'Opnieuw koppelen')
+      : 'Koppelen met deze Client ID';
+    $('#useDefaultSpotifyApp').textContent = source === 'default' && relevant
+      ? (issue ? 'Ingebouwde koppeling herstellen' : 'Opnieuw koppelen')
+      : 'Ingebouwde koppeling gebruiken';
+    $('#connectCustomSpotifyApp').textContent = source === 'own' && relevant
+      ? (issue ? 'Deze koppeling herstellen' : 'Opnieuw koppelen')
+      : 'Opslaan en Spotify koppelen';
+  }
+
+  function renderConnection(profile) {
+    if (profile?.display_name) spotifyProfileName = profile.display_name;
+    const hasSession = window.SpotifyApp.hasSession();
+    const connected = hasSession && !spotifyConnectionIssue;
+    const issue = Boolean(spotifyConnectionIssue);
+    const source = window.SpotifyApp.clientSource?.() || 'default';
+
+    $('#spotifyConnectionCard').classList.toggle('connected', connected);
+    $('#spotifyConnectionCard').classList.toggle('issue', issue);
     $('#connectionIcon').classList.toggle('connected', connected);
-    $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : 'Spotify niet gekoppeld';
-    $('#connectionDetail').textContent = connected ? sourceLabel : 'Kies een Developer-koppeling om Spotify te verbinden.';
-    $('#connectSpotify').hidden = connected;
-    $('#manageSpotify').hidden = !connected;
+    $('#connectionIcon').classList.toggle('issue', issue);
+
+    $('#spotifyConnection').textContent = issue
+      ? 'Spotify-koppeling heeft aandacht nodig'
+      : connected
+        ? `Gekoppeld als ${spotifyProfileName || 'Spotify-gebruiker'}`
+        : 'Spotify niet gekoppeld';
+
+    $('#connectionDetail').textContent = issue
+      ? `${spotifySourceLabel(source)}: toegang vervallen of ingetrokken.`
+      : connected
+        ? `Via ${spotifySourceLabel(source).toLocaleLowerCase('nl')}.`
+        : 'Kies een Developer-koppeling om Spotify te verbinden.';
+
+    $('#connectSpotify').hidden = connected || issue;
+    $('#manageSpotify').hidden = !connected && !issue;
     $('#disconnectSpotify').hidden = !connected;
+    $('#manageSpotify').textContent = issue ? 'Herstellen' : 'Beheren';
     $('#connectSpotify').disabled = false;
+
+    updateSpotifyManagementState();
   }
 
   function selectSpotifyPath(path = '') {
@@ -109,7 +181,9 @@
     $('#spotifyClientIdInput').value = source === 'own' ? currentClientId : '';
     $('#sharedSpotifyClientIdInput').value = source === 'shared' ? currentClientId : '';
 
-    if (window.SpotifyApp.hasSession()) {
+    updateSpotifyManagementState();
+
+    if (window.SpotifyApp.hasSession() || spotifyConnectionIssue) {
       selectSpotifyPath(source === 'own' ? 'own' : 'shared');
     } else if (source === 'own' || source === 'shared') {
       selectSpotifyPath(source);
@@ -147,20 +221,36 @@
   }
 
   async function refreshConnection() {
-    if (!window.SpotifyApp.hasSession()) return renderConnection(null);
+    if (!window.SpotifyApp.hasSession()) {
+      renderConnection(null);
+      return;
+    }
+
     try {
-      renderConnection(await window.SpotifyApp.profile());
+      const profile = await window.SpotifyApp.profile();
+      spotifyConnectionIssue = '';
+      renderConnection(profile);
     } catch (error) {
       const source = window.SpotifyApp.clientSource?.() || 'default';
-      window.SpotifyApp.clear();
+      const accessInvalid = error.code === 'SPOTIFY_ACCESS_INVALID' || error.code === 'SPOTIFY_SESSION_EXPIRED';
+
+      if (accessInvalid || !window.SpotifyApp.hasSession()) {
+        spotifyConnectionIssue = 'access';
+        renderConnection(null);
+        setError(error.message || 'Spotify heeft de toegang tot deze koppeling geweigerd.');
+        setStatus(
+          'Spotify-koppeling herstellen',
+          source === 'shared' || source === 'default'
+            ? 'Controleer of jouw Spotify-account nog bij Users Management staat en koppel daarna opnieuw.'
+            : 'Controleer Spotify Premium en je Developer-instellingen en koppel daarna opnieuw.'
+        );
+        return;
+      }
+
+      // Bij een tijdelijke netwerkfout blijven geldige tokens bewaard.
       renderConnection(null);
-      setError(error.message || 'Spotify kon de koppeling niet controleren.');
-      setStatus(
-        'Spotify-koppeling niet gelukt',
-        source === 'shared'
-          ? 'Controleer bij de eigenaar of jouw Spotify-account is toegevoegd bij Users Management.'
-          : 'Controleer je Spotify Premium-account en de instellingen van de Developer-koppeling.'
-      );
+      setError('Spotify kon tijdelijk niet worden gecontroleerd. Je koppeling blijft bewaard.');
+      setStatus('Spotify tijdelijk niet bereikbaar', 'Probeer het over een moment opnieuw.');
     }
   }
 
@@ -257,6 +347,8 @@
 
   $('#disconnectSpotify').addEventListener('click', () => {
     window.SpotifyApp.clear();
+    spotifyConnectionIssue = '';
+    spotifyProfileName = '';
     renderConnection(null);
     setStatus('Spotify ontkoppeld', 'Koppel een account om een sessie te starten.');
   });
@@ -273,11 +365,31 @@
   }));
 
   (async () => {
+    const storedIssue = sessionStorage.getItem(spotifyIssueStorageKey);
+    if (storedIssue) {
+      spotifyConnectionIssue = storedIssue;
+      sessionStorage.removeItem(spotifyIssueStorageKey);
+    }
+
     renderGenres();
     renderHistoryStatus();
     $('#spotifyRedirectUri').value = window.SpotifyApp.redirectUri?.() || '';
     renderConnection(null);
-    try { await window.SpotifyApp.handleCallback(); } catch (error) { setError(error.message); }
+
+    try {
+      const connected = await window.SpotifyApp.handleCallback();
+      if (connected) spotifyConnectionIssue = '';
+    } catch (error) {
+      setError(error.message);
+    }
+
     await refreshConnection();
+
+    if (storedIssue && !window.SpotifyApp.hasSession()) {
+      spotifyConnectionIssue = storedIssue;
+      renderConnection(null);
+      setError('De Spotify-toegang tot deze Developer-koppeling is niet meer geldig.');
+      setStatus('Spotify-koppeling herstellen', 'Open Beheren en koppel opnieuw of kies een andere Developer-koppeling.');
+    }
   })();
 })();
