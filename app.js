@@ -7,6 +7,7 @@
   const uniqueTracks = list => [...new Map(list.map(track => [trackKey(track), track])).values()];
   const libraryKeys = new Set(uniqueTracks(tracks).map(trackKey));
   let selectedGenres = ['alles'];
+  let actionInProgress = false;
   const historyStorageKey = 'muziekmix.playedHistory.v1';
   const recentHistoryStorageKey = 'muziekmix.recentPlaybackHistory.v1';
   const readHistory = () => {
@@ -139,8 +140,17 @@
   }
 
   async function guarded(action) {
-    try { setError(); await action(); }
-    catch (error) { setError(error.message || 'Er ging iets mis.'); setStatus('Actie niet gelukt', 'Controleer de Spotify-koppeling en probeer opnieuw.'); }
+    if (actionInProgress) return;
+    actionInProgress = true;
+    try {
+      setError();
+      await action();
+    } catch (error) {
+      setError(error.message || 'Er ging iets mis.');
+      setStatus('Actie niet gelukt', 'Controleer de Spotify-koppeling en probeer opnieuw.');
+    } finally {
+      actionInProgress = false;
+    }
   }
 
   $('#genreToggle').addEventListener('click', () => {
