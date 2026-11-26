@@ -73,7 +73,7 @@
     $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : 'Spotify niet gekoppeld';
     $('#connectionDetail').textContent = connected
       ? (customDeveloperApp ? 'Via een eigen of gedeelde Spotify Developer-app.' : 'Via de bestaande Muziekmix-koppeling.')
-      : (customDeveloperApp ? 'Eigen Developer-app ingesteld. Koppel je Spotify-account.' : 'Kies de bestaande koppeling of gebruik je eigen Developer-app.');
+      : (customDeveloperApp ? 'Developer-koppeling ingesteld. Koppel je Spotify-account.' : 'Kies een Developer-koppeling om Spotify te verbinden.');
     $('#connectSpotify').hidden = connected;
     $('#disconnectSpotify').hidden = !connected;
     $('#connectSpotify').disabled = false;
