@@ -976,3 +976,12 @@ body.landing-page {
     font-size: 10px;
   }
 }
+
+/* Management: keep recovery and disconnect side by side, with inline validation. */
+.landing-page .connection-card.issue.has-two-actions .connection-manage-button { grid-column: auto; }
+.landing-page .connection-disconnect-button:disabled { opacity:.45; cursor:wait; }
+.landing-page .spotify-setup-error { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #6c493f; border-radius: 11px; background: #281c19; color: #ffb1a3; line-height: 1.45; overflow-wrap: anywhere; }
+.landing-page .spotify-account-help { grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.landing-page .spotify-account-help summary { cursor: pointer; color: var(--text); padding: 6px 0; }
+.landing-page .spotify-account-help p { margin: 4px 0 0; }
+.landing-page .spotify-account-help a { color: var(--lime); }
