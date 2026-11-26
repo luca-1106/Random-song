@@ -122,8 +122,20 @@
 
   async function refreshConnection() {
     if (!window.SpotifyApp.hasSession()) return renderConnection(null);
-    try { renderConnection(await window.SpotifyApp.profile()); }
-    catch (_) { window.SpotifyApp.clear(); renderConnection(null); }
+    try {
+      renderConnection(await window.SpotifyApp.profile());
+    } catch (error) {
+      const source = window.SpotifyApp.clientSource?.() || 'default';
+      window.SpotifyApp.clear();
+      renderConnection(null);
+      setError(error.message || 'Spotify kon de koppeling niet controleren.');
+      setStatus(
+        'Spotify-koppeling niet gelukt',
+        source === 'shared'
+          ? 'Controleer bij de eigenaar of jouw Spotify-account is toegevoegd bij Users Management.'
+          : 'Controleer je Spotify Premium-account en de instellingen van de Developer-koppeling.'
+      );
+    }
   }
 
   async function guarded(action) {
