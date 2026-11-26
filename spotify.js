@@ -6,7 +6,7 @@
   const authVersion = String(config.spotifyAuthVersion || '1');
   const redirectUri = String(config.spotifyRedirectUri || location.origin + location.pathname).trim();
   const prefix = 'muziekmix.spotify.';
-  const keys = Object.fromEntries(['access','expiry','refresh','verifier','state','scope','authVersion','customClientId','clientMode','clientSource','connectionIssue'].map(k => [k, prefix + k]));
+  const keys = Object.fromEntries(['access','expiry','refresh','verifier','state','scope','authVersion','customClientId','clientMode','clientSource','connectionIssue','revision'].map(k => [k, prefix + k]));
   keys.sessionClient = prefix + 'sessionClientId';
   keys.authClient = prefix + 'authClientId';
   const pendingKey = prefix + 'pendingAuthorization.v2';
@@ -28,6 +28,7 @@
 
   function clearTokens() {
     generation++;
+    put(keys.revision, String(Date.now()) + '-' + Math.random().toString(36).slice(2));
     refreshJob = null;
     [keys.access,keys.expiry,keys.refresh,keys.scope,keys.sessionClient].forEach(remove);
   }
@@ -90,10 +91,11 @@
     if (!force && get(keys.access) && Date.now() < Number(get(keys.expiry))-60000) return get(keys.access);
     if (!get(keys.refresh)) throw invalidate('SPOTIFY_SESSION_EXPIRED','Log opnieuw in bij Spotify.');
     const refresh = get(keys.refresh);
-    if (refreshJob?.clientId === clientId && refreshJob.refresh === refresh) return refreshJob.promise;
+    const revision = get(keys.revision);
+    if (refreshJob?.clientId === clientId && refreshJob.refresh === refresh && refreshJob.revision === revision) return refreshJob.promise;
     const epoch = generation;
-    const stillCurrent = () => epoch === generation && clientId === currentClientId() && refresh === get(keys.refresh);
-    const job = {clientId,refresh};
+    const stillCurrent = () => epoch === generation && revision === get(keys.revision) && clientId === currentClientId() && refresh === get(keys.refresh);
+    const job = {clientId,refresh,revision};
     job.promise = (async()=>{
       try {
         const data = await tokenRequest({client_id:clientId,grant_type:'refresh_token',refresh_token:refresh});
@@ -118,9 +120,9 @@
     return {response,data};
   }
   async function request(path, method='GET', body) {
-    const clientId = currentClientId(), epoch = generation;
+    const clientId = currentClientId(), epoch = generation, revision = get(keys.revision);
     const checkCurrent = () => {
-      if (epoch !== generation || clientId !== currentClientId()) throw coded('De Spotify-koppeling is gewijzigd.','SPOTIFY_TEMPORARY');
+      if (epoch !== generation || revision !== get(keys.revision) || clientId !== currentClientId()) throw coded('De Spotify-koppeling is gewijzigd.','SPOTIFY_TEMPORARY');
     };
     let bearer = await token();
     checkCurrent();
@@ -143,6 +145,8 @@
       // Een endpoint-specifieke 403 bewijst niet dat de koppeling is ingetrokken.
       // Controleer het profiel; alleen een bevestigde auth-fout mag tokens wissen.
       await request('/me');
+      checkCurrent();
+      if (path.startsWith('/me/player') && ['NO_ACTIVE_DEVICE','DEVICE_NOT_FOUND'].includes(reason)) throw coded('Het Spotify-afspeelapparaat is niet beschikbaar.','SPOTIFY_DEVICE_UNAVAILABLE',detail);
       if (path.startsWith('/me/player')) throw coded('Spotify weigert de afspeelactie: '+message,'SPOTIFY_PLAYBACK_FORBIDDEN',detail);
       throw coded('Spotify weigert deze functie: '+message,'SPOTIFY_FORBIDDEN',detail);
     }
@@ -159,7 +163,7 @@
     if (!validClient(clientId)) throw coded('Vul een geldige Spotify Client ID in.','SPOTIFY_CONFIGURATION');
     const verifier = random(64), state = random(24);
     const challenge = base64url(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
-    sessionStorage.setItem(pendingKey,JSON.stringify({clientId,source,verifier,state,created:Date.now()}));
+    sessionStorage.setItem(pendingKey,JSON.stringify({clientId,source,verifier,state,created:Date.now(),revision:get(keys.revision)}));
     const params = new URLSearchParams({
       client_id:clientId,response_type:'code',redirect_uri:redirectUri,code_challenge_method:'S256',code_challenge:challenge,state,scope:requiredScopes,show_dialog:'true'
     });
@@ -175,11 +179,14 @@
     if (!pending || params.get('state') !== pending.state || Date.now()-pending.created > 30*60*1000) throw coded('De Spotify-aanmelding kon niet veilig worden gecontroleerd. Probeer opnieuw.','SPOTIFY_CALLBACK');
     clearPending();
     if (params.has('error')) throw coded('Spotify-aanmelding geannuleerd of geweigerd.','SPOTIFY_CALLBACK');
+    if (pending.revision !== get(keys.revision)) throw coded('Je aanmelding is ondertussen gewijzigd. Start de koppeling opnieuw.','SPOTIFY_CALLBACK');
     const data = await tokenRequest({client_id:pending.clientId,grant_type:'authorization_code',code:params.get('code'),redirect_uri:redirectUri,code_verifier:pending.verifier});
-    if (!data.access_token || !data.refresh_token) throw coded('Spotify gaf geen volledige nieuwe aanmelding terug.','SPOTIFY_CALLBACK');
+    if (!data?.access_token || !data?.refresh_token) throw coded('Spotify gaf geen volledige nieuwe aanmelding terug.','SPOTIFY_CALLBACK');
     // Verifieer de NIEUWE koppeling vóór de bestaande aanmelding te vervangen.
     const {response,data:profile} = await api('/me','GET',null,data.access_token);
     if (!response.ok || !profile?.id) throw coded(response.status === 403 ? 'Dit Spotify-account heeft geen toegang tot de gekozen Developer-koppeling. Controleer Users Management.' : 'De nieuwe Spotify-aanmelding kon niet worden gecontroleerd. Probeer opnieuw.','SPOTIFY_CALLBACK');
+    if (pending.revision !== get(keys.revision)) throw coded('Je aanmelding is ondertussen gewijzigd. Start de koppeling opnieuw.','SPOTIFY_CALLBACK');
+    if (typeof data.scope === 'string' && !requiredScopes.split(' ').every(scope => data.scope.split(/\s+/).includes(scope))) throw coded('Spotify heeft niet alle benodigde afspeelrechten gegeven. Bevestig de toestemmingen opnieuw.','SPOTIFY_CALLBACK');
     clearTokens();
     commitSource(pending.source,pending.clientId);
     save(data,pending.clientId,true);
