@@ -561,7 +561,10 @@
     playerReady = false;
     browserDeviceId = '';
     if (currentTrack) {
-      if (playerState?.track_window?.current_track?.uri === currentTrack.uri) lastPosition = Math.max(0,Number(playerState.position)||0);
+      if (playerState?.track_window?.current_track?.uri === currentTrack.uri) {
+        const estimate = (Number(playerState.position)||0) + (isPlaying ? Math.max(0,Date.now()-stateUpdatedAt) : 0);
+        lastPosition = Math.max(0,Math.min(estimate,Math.max(0,(Number(playerState.duration)||Number(currentTrack.duration_ms)||estimate+1000)-1000)));
+      }
       resumeAfterReconnect = true;
       setPauseButton('play','Verder luisteren');
     }
@@ -628,9 +631,26 @@
   }
   async function waitForSdk() {
     if (window.Spotify?.Player) return;
-    const deadline = Date.now()+12000;
-    while (!window.Spotify?.Player && Date.now()<deadline) await wait(100);
-    if (!window.Spotify?.Player) throw playerError('De Spotify-browserplayer kon niet worden geladen. Controleer je internetverbinding en eventuele blokkades.','SPOTIFY_DEVICE_UNAVAILABLE');
+    await new Promise((resolve,reject)=>{
+      let done=false;
+      const script=document.createElement('script');
+      const finish=error=>{
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        clearInterval(poll);
+        script.onerror=null;
+        if(error){script.remove();reject(error);}else resolve();
+      };
+      const failure=()=>finish(playerError('De Spotify-browserplayer kon niet worden geladen. Controleer je internetverbinding en eventuele blokkades.','SPOTIFY_DEVICE_UNAVAILABLE'));
+      const timer=setTimeout(failure,12000);
+      const poll=setInterval(()=>{if(window.Spotify?.Player)finish();},100);
+      window.onSpotifyWebPlaybackSDKReady=()=>{if(window.Spotify?.Player)finish();};
+      script.src='https://sdk.scdn.co/spotify-player.js';
+      script.async=true;
+      script.onerror=failure;
+      document.head.appendChild(script);
+    });
   }
   async function initialisePlayer() {
     disconnectPlayer();
@@ -706,15 +726,23 @@
     } finally { clearTimeout(timer); }
   }
   async function waitForTrack(uri) {
-    const epoch = playerGeneration;
-    const deadline = Date.now()+8000;
+    const epoch = playerGeneration, deadline = Date.now()+8000;
+    let resumed = false;
     while (Date.now()<deadline) {
       ensureReady();
       if(epoch!==playerGeneration || sessionLeaving) throw playerError('De speler is ondertussen gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
       if (playerState?.track_window?.current_track?.uri === uri && !playerState.paused) return;
-      // SDK callbacks can be sparse; ask the local player for its current state.
       const state = await bounded(player.getCurrentState(),'De speler reageert niet.',3000);
-      if (state?.track_window?.current_track?.uri === uri && !state.paused) { playerState=state; stateUpdatedAt=Date.now(); return; }
+      if(epoch!==playerGeneration || sessionLeaving) throw playerError('De speler is ondertussen gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
+      if (state?.track_window?.current_track?.uri === uri) {
+        playerState=state;
+        stateUpdatedAt=Date.now();
+        if(!state.paused)return;
+        if(!resumed){
+          resumed=true;
+          await bounded(player.resume(),'Spotify kon het nummer niet hervatten.');
+        }
+      }
       await wait(250);
     }
     throw playerError('Spotify heeft het nummer niet gestart. Probeer dezelfde afspeelactie opnieuw.','SPOTIFY_PLAYBACK_NOT_STARTED');
@@ -747,9 +775,7 @@
     await requestTrackPlayback(track.uri,position);
     ensureReady();
     if (epoch!==playerGeneration || sessionLeaving) throw playerError('De speler is ondertussen gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
-    // A mobile browser can remain paused after a remote play command.
-    const state = await bounded(player.getCurrentState(),'De speler reageert niet.',3000);
-    if (state?.paused && state?.track_window?.current_track?.uri === track.uri) await bounded(player.resume(),'Spotify kon het nummer niet hervatten.');
+    // Wait until the target is actually audible; only resume that track.
     await waitForTrack(track.uri);
     if (epoch!==playerGeneration || sessionLeaving) throw playerError('De speler is ondertussen gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
   }
@@ -808,6 +834,7 @@
     if (!currentTrack && !pendingTrack) await prepareTrack();
     await initialisePlayer();
     if (sessionLeaving) return;
+    ensureReady();
     if (!currentTrack) {
       $('#trackTitle').textContent = 'Klaar om af te spelen';
       $('#trackArtist').textContent = 'Tik op de playknop';
