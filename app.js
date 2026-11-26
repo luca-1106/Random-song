@@ -24,7 +24,7 @@
     const playedCount = currentPlayedHistory().length;
     if (resetButton) resetButton.hidden = playedCount === 0;
     if (!element) return;
-    element.textContent = message || (playedCount ? `${playedCount} eerder afgespeelde nummers geblokkeerd` : 'De volledige bibliotheek is beschikbaar');
+    element.textContent = message || (playedCount ? `${playedCount} nummers in je historie` : 'De volledige bibliotheek is beschikbaar');
   };
 
   const setError = message => { $('#errorMessage').textContent = message || ''; $('#errorMessage').hidden = !message; };
@@ -68,12 +68,15 @@
 
   function renderConnection(profile) {
     const connected = Boolean(profile);
-    const customDeveloperApp = window.SpotifyApp.clientMode?.() === 'custom';
+    const source = window.SpotifyApp.clientSource?.() || 'default';
+    const sourceLabel = source === 'shared'
+      ? 'Via een gedeelde Spotify Developer-koppeling.'
+      : source === 'own'
+        ? 'Via je eigen Spotify Developer-app.'
+        : 'Via de ingebouwde Muziekmix-koppeling.';
     $('#connectionIcon').classList.toggle('connected', connected);
     $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : 'Spotify niet gekoppeld';
-    $('#connectionDetail').textContent = connected
-      ? (customDeveloperApp ? 'Via een eigen of gedeelde Spotify Developer-app.' : 'Via de bestaande Muziekmix-koppeling.')
-      : (customDeveloperApp ? 'Developer-koppeling ingesteld. Koppel je Spotify-account.' : 'Kies een Developer-koppeling om Spotify te verbinden.');
+    $('#connectionDetail').textContent = connected ? sourceLabel : 'Kies een Developer-koppeling om Spotify te verbinden.';
     $('#connectSpotify').hidden = connected;
     $('#disconnectSpotify').hidden = !connected;
     $('#connectSpotify').disabled = false;
@@ -83,10 +86,10 @@
     const dialog = $('#spotifySetupDialog');
     if (!dialog) return;
     $('#spotifyRedirectUri').value = window.SpotifyApp.redirectUri?.() || '';
-    $('#spotifyClientIdInput').value = window.SpotifyApp.clientMode?.() === 'custom'
-      ? (window.SpotifyApp.currentClientId?.() || '')
-      : '';
-    $('#sharedSpotifyClientIdInput').value = '';
+    const source = window.SpotifyApp.clientSource?.() || 'default';
+    const currentClientId = window.SpotifyApp.currentClientId?.() || '';
+    $('#spotifyClientIdInput').value = source === 'own' ? currentClientId : '';
+    $('#sharedSpotifyClientIdInput').value = source === 'shared' ? currentClientId : '';
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   }
@@ -189,14 +192,14 @@
   }));
   $('#connectCustomSpotifyApp').addEventListener('click', () => guarded(async () => {
     const clientId = $('#spotifyClientIdInput').value.trim();
-    window.SpotifyApp.setCustomClientId(clientId);
+    window.SpotifyApp.setCustomClientId(clientId, 'own');
     closeSpotifySetup();
     await window.SpotifyApp.login();
   }));
 
   $('#connectSharedSpotifyApp').addEventListener('click', () => guarded(async () => {
     const clientId = $('#sharedSpotifyClientIdInput').value.trim();
-    window.SpotifyApp.setCustomClientId(clientId);
+    window.SpotifyApp.setCustomClientId(clientId, 'shared');
     closeSpotifySetup();
     await window.SpotifyApp.login();
   }));
