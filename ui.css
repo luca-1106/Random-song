@@ -880,6 +880,32 @@ body.landing-page {
   font-size: 9px;
   line-height: 1.35;
 }
+.landing-page .spotify-current-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.landing-page .spotify-reauthorize-button {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 5px;
+  border: 1px solid #4b5543;
+  border-radius: 10px;
+  background: #2a3125;
+  color: var(--text);
+  font: 700 10px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+.landing-page .spotify-reauthorize-button:hover {
+  border-color: #66745a;
+  background: #313a2a;
+}
+.landing-page .spotify-current-connection.issue .spotify-reauthorize-button {
+  border-color: #75633f;
+  background: #322b1e;
+  color: #ead18f;
+}
 .landing-page .spotify-path-active-badge,
 .landing-page .spotify-sub-active-badge {
   width: max-content;
