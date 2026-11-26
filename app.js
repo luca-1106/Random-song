@@ -72,7 +72,7 @@
     $('#connectionIcon').classList.toggle('connected', connected);
     $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : 'Spotify niet gekoppeld';
     $('#connectionDetail').textContent = connected
-      ? (customDeveloperApp ? 'Via je eigen Spotify Developer-app.' : 'Via de bestaande Muziekmix-koppeling.')
+      ? (customDeveloperApp ? 'Via een eigen of gedeelde Spotify Developer-app.' : 'Via de bestaande Muziekmix-koppeling.')
       : (customDeveloperApp ? 'Eigen Developer-app ingesteld. Koppel je Spotify-account.' : 'Kies de bestaande koppeling of gebruik je eigen Developer-app.');
     $('#connectSpotify').hidden = connected;
     $('#disconnectSpotify').hidden = !connected;
@@ -86,6 +86,7 @@
     $('#spotifyClientIdInput').value = window.SpotifyApp.clientMode?.() === 'custom'
       ? (window.SpotifyApp.currentClientId?.() || '')
       : '';
+    $('#sharedSpotifyClientIdInput').value = '';
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   }
@@ -188,6 +189,13 @@
   }));
   $('#connectCustomSpotifyApp').addEventListener('click', () => guarded(async () => {
     const clientId = $('#spotifyClientIdInput').value.trim();
+    window.SpotifyApp.setCustomClientId(clientId);
+    closeSpotifySetup();
+    await window.SpotifyApp.login();
+  }));
+
+  $('#connectSharedSpotifyApp').addEventListener('click', () => guarded(async () => {
+    const clientId = $('#sharedSpotifyClientIdInput').value.trim();
     window.SpotifyApp.setCustomClientId(clientId);
     closeSpotifySetup();
     await window.SpotifyApp.login();
