@@ -27,6 +27,11 @@
   const base64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
   const random = length => base64url(crypto.getRandomValues(new Uint8Array(length)));
   const digest = value => crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  const codedError = (message, code) => {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  };
 
   const storedCustomClientId = () => (localStorage.getItem(customClientIdKey) || '').trim();
   const clientMode = () => localStorage.getItem(clientModeKey) === 'custom' && storedCustomClientId() ? 'custom' : 'default';
@@ -119,9 +124,13 @@
         refresh_token: refreshToken
       }), clientId);
       return accessToken;
-    } catch (_) {
+    } catch (error) {
+      // Een netwerkfout mag een geldige koppeling niet wissen.
+      if (error instanceof TypeError) {
+        throw new Error('Spotify kon tijdelijk niet worden bereikt. Probeer het opnieuw.');
+      }
       clearAuthState();
-      throw new Error('Je Spotify-sessie is verlopen. Koppel je account opnieuw.');
+      throw codedError('Je Spotify-sessie is verlopen of ingetrokken. Koppel je account opnieuw.', 'SPOTIFY_SESSION_EXPIRED');
     }
   }
 
@@ -143,7 +152,10 @@
     }
     if (!response.ok) {
       if (response.status === 404) throw new Error('Geen actief Spotify-apparaat gevonden. Open Spotify op je telefoon of speaker en speel daar kort iets af.');
-      if (response.status === 403) throw new Error('Spotify weigert toegang. Controleer Spotify Premium en of jouw account toegang heeft tot de gekozen Developer-app.');
+      if (response.status === 403) {
+        clearAuthState();
+        throw codedError('Spotify weigert toegang tot deze Developer-koppeling. Controleer Spotify Premium en Users Management.', 'SPOTIFY_ACCESS_INVALID');
+      }
       if (response.status === 429) throw new Error(data.error?.reason === 'QUOTA_EXCEEDED'
         ? 'De Spotify Developer-app heeft tijdelijk zijn API-quota bereikt.'
         : 'Spotify ontvangt te veel verzoeken. Wacht even en probeer opnieuw.');
