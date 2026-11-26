@@ -146,9 +146,13 @@
 
     if (response.status === 204) return null;
     const data = await response.json().catch(() => ({}));
-    if (response.status === 401 && retry) {
-      tokenExpiry = 0;
-      return request(path, method, body, false);
+    if (response.status === 401) {
+      if (retry) {
+        tokenExpiry = 0;
+        return request(path, method, body, false);
+      }
+      clearAuthState();
+      throw codedError('Je Spotify-sessie is verlopen. Log opnieuw in bij Spotify.', 'SPOTIFY_SESSION_EXPIRED');
     }
     if (!response.ok) {
       if (response.status === 404) throw new Error('Geen actief Spotify-apparaat gevonden. Open Spotify op je telefoon of speaker en speel daar kort iets af.');
@@ -217,8 +221,8 @@
   }
 
   async function reauthorize() {
-    // Bewaar Developer-keuze/Client ID, maar forceer een nieuwe Spotify-login.
-    clearAuthState();
+    // Forceer een nieuwe Spotify-autorisatie, maar wis de huidige geldige
+    // sessie pas nadat Spotify daadwerkelijk nieuwe tokens teruggeeft.
     return login({ showDialog: true });
   }
 
