@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#121411"><meta name="description" content="Start een Spotify-sessie per muziekgenre.">
-  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=connection-management-3">
+  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=layout-resilience-1">
 </head>
 <body class="landing-page">
   <main class="app-shell">
     <header class="topbar"><div class="brand-mark" aria-hidden="true">♫</div><div><p class="eyebrow">JOUW EIGEN MUZIEKMIX</p><h1>Muziekmix<span>.</span></h1></div></header>
     <section class="intro" aria-live="polite"><div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Klaar voor een nieuwe sessie.</span></div><p id="instruction">Kies een genre, koppel Spotify en start je sessie.</p></section>
     <section id="spotifyConnectionCard" class="connection-card" aria-label="Spotify-verbinding"><div class="connection-main"><div id="connectionIcon" class="connection-icon" aria-hidden="true">♫</div><div class="connection-copy"><strong id="spotifyConnection">Spotify niet gekoppeld</strong><span id="connectionDetail">Koppel je eigen account om af te spelen.</span></div></div><div class="connection-actions"><button id="connectSpotify" class="secondary-button compact-button connection-connect-button" type="button">Spotify koppelen</button><button id="manageSpotify" class="secondary-button compact-button connection-manage-button" type="button" hidden>Beheren</button><button id="disconnectSpotify" class="connection-disconnect-button" type="button" hidden>Ontkoppelen</button></div></section>
+    <p id="errorMessage" class="error-message landing-alert" role="alert" hidden></p>
     <section class="genre-picker" aria-label="Kies een muziekgenre"><div class="genre-heading"><span class="eyebrow">KIES JE MUZIEK</span><span id="genreCount" class="genre-count"></span></div><div class="genre-multi">
   <button id="genreToggle" class="genre-select-wrap genre-multi-toggle" type="button" aria-expanded="false" aria-controls="genreMenu">
     <span class="genre-select-icon" aria-hidden="true">♫</span>
@@ -30,7 +31,7 @@
     <label class="genre-option"><input type="checkbox" value="bluesjazzswing"><span class="genre-option-name">Blues, Jazz &amp; Swing</span><span class="genre-available-count" aria-label="beschikbare nummers"></span></label>
   </div>
 </div></section>
-    <section class="start-card"><div class="vinyl small-vinyl" aria-hidden="true"><div class="vinyl-label">♫</div></div><h2>Start een sessie</h2><p>Nummers die nog niet in je historie staan krijgen voorrang binnen je gekozen genres.</p><button id="startSession" class="primary-button full-button" type="button"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 5v14l11-7z"/></svg></span><span>Start sessie</span></button><button id="resetHistory" class="text-button history-reset-button" type="button" hidden>Geef gehele bibliotheek weer vrij</button><p id="historyStatus" class="history-status" aria-live="polite"></p><p id="errorMessage" class="error-message" role="alert" hidden></p></section>
+    <section class="start-card"><div class="vinyl small-vinyl" aria-hidden="true"><div class="vinyl-label">♫</div></div><h2>Start een sessie</h2><p>Nummers die nog niet in je historie staan krijgen voorrang binnen je gekozen genres.</p><button id="startSession" class="primary-button full-button" type="button"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 5v14l11-7z"/></svg></span><span>Start sessie</span></button><button id="resetHistory" class="text-button history-reset-button" type="button" hidden>Geef gehele bibliotheek weer vrij</button><p id="historyStatus" class="history-status" aria-live="polite"></p></section>
   </main>
   <dialog id="spotifySetupDialog" class="spotify-setup-dialog" aria-labelledby="spotifySetupTitle">
     <div class="spotify-setup-content">
@@ -156,6 +157,6 @@
       </section>
     </div>
   </dialog>
-  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=connection-management-2"></script><script src="app.js?v=connection-management-2"></script>
+  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=connection-management-2"></script><script src="app.js?v=layout-resilience-1"></script>
 </body>
 </html>
