@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#121411"><meta name="description" content="Start een Spotify-sessie per muziekgenre.">
-  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=availability-counts-1">
+  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=spotify-own-app-1">
 </head>
 <body class="landing-page">
   <main class="app-shell">
@@ -32,6 +32,43 @@
 </div></section>
     <section class="start-card"><div class="vinyl small-vinyl" aria-hidden="true"><div class="vinyl-label">♫</div></div><h2>Start een sessie</h2><p>Er wordt alleen uit je gekozen genres gespeeld. Eerder afgespeelde nummers blijven zo lang mogelijk geblokkeerd.</p><button id="startSession" class="primary-button full-button" type="button"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 5v14l11-7z"/></svg></span><span>Start sessie</span></button><button id="resetHistory" class="text-button history-reset-button" type="button" hidden>Geef gehele bibliotheek weer vrij</button><p id="historyStatus" class="history-status" aria-live="polite"></p><p id="errorMessage" class="error-message" role="alert" hidden></p></section>
   </main>
-  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=player-auth-1"></script><script src="app.js?v=preserve-recent-1"></script>
+  <dialog id="spotifySetupDialog" class="spotify-setup-dialog" aria-labelledby="spotifySetupTitle">
+    <div class="spotify-setup-content">
+      <div class="spotify-setup-head">
+        <div>
+          <p class="eyebrow">SPOTIFY KOPPELEN</p>
+          <h2 id="spotifySetupTitle">Kies je koppeling</h2>
+        </div>
+        <button id="closeSpotifySetup" class="spotify-setup-close" type="button" aria-label="Sluiten">×</button>
+      </div>
+
+      <button id="useDefaultSpotifyApp" class="spotify-setup-option" type="button">
+        <strong>Bestaande koppeling gebruiken</strong>
+        <span>Alleen geschikt als jouw Spotify-account toegang heeft tot de Developer-app van Muziekmix.</span>
+      </button>
+
+      <div class="spotify-setup-divider"><span>of</span></div>
+
+      <section class="spotify-custom-app">
+        <h3>Eigen Spotify Developer-app</h3>
+        <p>Maak in Spotify for Developers je eigen app, voeg onderstaande Redirect URI exact toe en vul daarna alleen je Client ID in. Deel hier nooit een Client Secret.</p>
+
+        <label class="spotify-setup-label" for="spotifyRedirectUri">Redirect URI</label>
+        <div class="spotify-copy-row">
+          <input id="spotifyRedirectUri" class="spotify-setup-input" type="text" readonly>
+          <button id="copySpotifyRedirect" class="secondary-button compact-button" type="button">Kopieer</button>
+        </div>
+
+        <a class="spotify-developer-link" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Open Spotify Developer Dashboard</a>
+
+        <label class="spotify-setup-label" for="spotifyClientIdInput">Client ID</label>
+        <input id="spotifyClientIdInput" class="spotify-setup-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak je Spotify Client ID">
+
+        <button id="connectCustomSpotifyApp" class="primary-button full-button" type="button">Developer-app opslaan en Spotify koppelen</button>
+        <p class="spotify-setup-note">Je Client ID wordt alleen lokaal in deze browser opgeslagen. Een Client ID is openbaar; een Client Secret hoort nooit in deze app.</p>
+      </section>
+    </div>
+  </dialog>
+  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=spotify-own-app-1"></script><script src="app.js?v=spotify-own-app-1"></script>
 </body>
 </html>
