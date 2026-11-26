@@ -127,6 +127,7 @@
   let expandedAllMode = false;
   let repeatSource = '';
   let sessionRepeatUnlocked = false;
+  let recent100RelaxedForUnused = false;
   let selectedHistoryChoice = startedWithNoFreshSelected ? 'stay' : '';
   let noticeTimer;
   let player, browserDeviceId = '', pendingTrack, currentTrack, playerState, stateUpdatedAt = 0, used = new Set(), unavailable = new Set(), isPlaying = false, progressTimer;
@@ -184,7 +185,7 @@
   };
   const setPauseButton = (icon, label) => { $('#pauseButton').innerHTML = `<span class="button-icon" aria-hidden="true">${buttonIcons[icon]}</span><span>${label}</span>`; };
   const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-  const updateCount = () => { $('#sessionCount').textContent = `${used.size} / ${tracks.length}`; };
+  const updateCount = () => { $('#sessionCount').textContent = `${used.size} uniek`; };
   function updateProgress() { if (!playerState) return; const duration = Math.max(1, (playerState.duration || currentTrack?.duration_ms || 0) / 1000); const elapsed = (playerState.position || 0) / 1000 + (isPlaying ? (Date.now() - stateUpdatedAt) / 1000 : 0); const percentage = Math.min(100, elapsed / duration * 100); $('#progressBar').style.width = `${percentage}%`; $('.progress-track').setAttribute('aria-valuenow', String(Math.round(percentage))); }
   function startTimer() { clearInterval(progressTimer); updateProgress(); progressTimer = setInterval(updateProgress, 500); }
   function score(item, source) {
@@ -387,9 +388,29 @@
         continue;
       }
 
-      // Pas als ieder nummer ook binnen de huidige sessie is gebruikt, mag
-      // een nummer binnen dezelfde sessie opnieuw voorkomen. De laatste 100
-      // afspeelbeurten blijven altijd uitgesloten.
+      // Een sessiedubbel is pas toegestaan als ieder beschikbaar nummer in
+      // deze sessie minstens één keer is gebruikt. Door een handmatige
+      // bibliotheek-reset kan een nog ongebruikt nummer nog in de recente 100
+      // staan; in dat uitzonderlijke geval gaat sessie-uniciteit vóór recency.
+      const unusedEvenIfRecent = shuffle(sourceTracks.filter(track =>
+        !unavailable.has(key(track)) &&
+        !used.has(key(track))
+      ));
+      if (unusedEvenIfRecent.length) {
+        if (!recent100RelaxedForUnused) {
+          recent100RelaxedForUnused = true;
+          showSessionNotice('Om een dubbel nummer in deze sessie te voorkomen, kan nu een recent afgespeeld nummer terugkomen. Nog niet in deze sessie gespeelde nummers blijven voorrang houden.');
+        }
+        repeatSource = 'recent-unused';
+        tracks = mergeTracks(sourceTracks);
+        updateCount();
+        if (await pickResolved(unusedEvenIfRecent)) return;
+        continue;
+      }
+
+      // Pas als ieder beschikbaar nummer ook binnen de huidige sessie is
+      // gebruikt, mag een nummer binnen dezelfde sessie opnieuw voorkomen.
+      // Dan blijft de laatste-100-regel als harde grens gelden.
       const replayCandidates = repeatCandidatesFrom(sourceTracks, recent100, true);
       if (!replayCandidates.length) {
         throw new Error('Er zijn tijdelijk geen nummers beschikbaar buiten de laatste 100 afgespeelde nummers.');
@@ -452,7 +473,9 @@
         // gebruikt. Vanaf hier mag niet opnieuw binnen hetzelfde genre worden
         // herhaald zolang elders nog sessie-ongebruikte muziek bestaat.
         selectedHistoryChoice = 'switch';
-        showSessionNotice('Alle nummers uit je gekozen genres zijn deze sessie gespeeld. We gaan verder met het meest verwante genre met beschikbare nummers.');
+        if (!selectedGenres.includes('alles')) {
+          showSessionNotice('Alle nummers uit je gekozen genres zijn deze sessie gespeeld. We gaan verder met het meest verwante genre met beschikbare nummers.');
+        }
       }
 
       if (expandToFreshGenre(historySet)) continue;
@@ -470,9 +493,9 @@
     }
   }
   async function waitForTrack(uri) { for (let attempt = 0; attempt < 30; attempt += 1) { if (playerState?.track_window?.current_track?.uri === uri && !playerState.paused) return; await wait(150); } throw new Error('Safari kon de Spotify-audio niet starten. Koppel Spotify opnieuw en probeer daarna nogmaals.'); }
-  async function playPending() { if (!pendingTrack) await prepareTrack(); await player.activateElement(); await window.SpotifyApp.request(`/me/player/play?device_id=${encodeURIComponent(browserDeviceId)}`, 'PUT', { uris: [pendingTrack.spotify.uri] }); await player.resume(); await waitForTrack(pendingTrack.spotify.uri); renderTrack(pendingTrack.spotify, pendingTrack.source, false); $('.player-card').classList.add('track-concealed'); $('#revealButton').hidden = false; currentTrack = pendingTrack.spotify; used.add(key(pendingTrack.source)); rememberPlayed(pendingTrack.source); pendingTrack = null; isPlaying = true; updateCount(); startTimer(); $('#startPlayback').hidden = true; $('.player-card').classList.remove('awaiting-playback'); $('#pauseButton').disabled = false; $('#nextButton').disabled = false; setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} van ${tracks.length} nummers afgespeeld.`, true); }
+  async function playPending() { if (!pendingTrack) await prepareTrack(); await player.activateElement(); await window.SpotifyApp.request(`/me/player/play?device_id=${encodeURIComponent(browserDeviceId)}`, 'PUT', { uris: [pendingTrack.spotify.uri] }); await player.resume(); await waitForTrack(pendingTrack.spotify.uri); renderTrack(pendingTrack.spotify, pendingTrack.source, false); $('.player-card').classList.add('track-concealed'); $('#revealButton').hidden = false; currentTrack = pendingTrack.spotify; used.add(key(pendingTrack.source)); rememberPlayed(pendingTrack.source); pendingTrack = null; isPlaying = true; updateCount(); startTimer(); $('#startPlayback').hidden = true; $('.player-card').classList.remove('awaiting-playback'); $('#pauseButton').disabled = false; $('#nextButton').disabled = false; setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} unieke nummers afgespeeld.`, true); }
   async function nextTrack() { await prepareTrack(); await playPending(); }
-  async function togglePause() { if (isPlaying) { await player.pause(); updateProgress(); isPlaying = false; setPauseButton('play', 'Verder luisteren'); setStatus('Gepauzeerd', 'Druk op Verder luisteren om deze track te hervatten.'); } else { await player.resume(); isPlaying = true; stateUpdatedAt = Date.now(); setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} van ${tracks.length} nummers afgespeeld.`, true); } }
+  async function togglePause() { if (isPlaying) { await player.pause(); updateProgress(); isPlaying = false; setPauseButton('play', 'Verder luisteren'); setStatus('Gepauzeerd', 'Druk op Verder luisteren om deze track te hervatten.'); } else { await player.resume(); isPlaying = true; stateUpdatedAt = Date.now(); setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} unieke nummers afgespeeld.`, true); } }
   async function guarded(action) { try { setError(); await action(); } catch (error) { setError(error.message || 'Er ging iets mis.'); setStatus('Actie niet gelukt', 'Controleer je Spotify-koppeling en probeer opnieuw.'); } }
   async function waitForSdk() { if (window.Spotify) return; await new Promise((resolve, reject) => { window.onSpotifyWebPlaybackSDKReady = resolve; setTimeout(() => reject(new Error('De Spotify-browserplayer kon niet worden geladen. Controleer je internetverbinding.')), 10_000); }); }
   async function initialisePlayer() { await waitForSdk(); await new Promise((resolve, reject) => { player = new window.Spotify.Player({ name: 'Muziekmix in Safari', getOAuthToken: async callback => { try { callback(await window.SpotifyApp.token()); } catch (error) { reject(error); callback(''); } }, volume: 0.8 }); player.addListener('ready', ({ device_id }) => { browserDeviceId = device_id; resolve(); }); player.addListener('not_ready', () => { browserDeviceId = ''; }); player.addListener('initialization_error', ({ message } = {}) => reject(new Error(`De browser kan de Spotify-player niet starten${message ? `: ${message}` : '.'}`))); player.addListener('authentication_error', ({ message } = {}) => reject(new Error(`Spotify heeft het afspeeltoken geweigerd${message ? `: ${message}` : '. Koppel Spotify opnieuw.'}`))); player.addListener('account_error', ({ message } = {}) => reject(new Error(`De Spotify-browserplayer vereist een geldig Premium-account${message ? `: ${message}` : '.'}`))); player.addListener('playback_error', ({ message } = {}) => setError(`Spotify kon het nummer niet afspelen${message ? `: ${message}` : '.'}`)); player.addListener('autoplay_failed', () => setError('Safari blokkeerde automatisch afspelen. Tik nogmaals op Start afspelen.')); player.addListener('player_state_changed', state => { if (!state) return; playerState = state; stateUpdatedAt = Date.now(); if (currentTrack && state.track_window.current_track.uri === currentTrack.uri) { isPlaying = !state.paused; updateProgress(); } }); player.connect().then(connected => { if (!connected) reject(new Error('Spotify-browserplayer kon niet verbinden.')); }); }); await window.SpotifyApp.request('/me/player', 'PUT', { device_ids: [browserDeviceId], play: false }); }
