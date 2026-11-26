@@ -572,3 +572,52 @@ body.landing-page {
     padding-bottom: 8px;
   }
 }
+
+
+.landing-page .spotify-share-box {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid #49573c;
+  border-radius: 12px;
+  background: #20261b;
+}
+.landing-page .spotify-share-box h4 {
+  margin: 0 0 5px;
+  color: var(--text);
+  font-size: 12px;
+}
+.landing-page .spotify-share-box > p,
+.landing-page .spotify-shared-app > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.landing-page .spotify-share-steps {
+  margin: 7px 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.landing-page .spotify-share-steps li + li {
+  margin-top: 2px;
+}
+.landing-page .spotify-share-note {
+  color: #c9cfbf !important;
+}
+.landing-page .spotify-shared-app h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.landing-page .spotify-shared-app .full-button {
+  margin-top: 10px;
+}
+@media (max-height: 650px) {
+  .landing-page .spotify-share-box {
+    padding: 9px 10px;
+  }
+  .landing-page .spotify-share-steps {
+    margin: 5px 0;
+  }
+}
