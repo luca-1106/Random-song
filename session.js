@@ -208,11 +208,16 @@
     return titleMatch && artistMatch && !unwantedVersion && !extendedVersion ? titleMatch + artistMatch + yearMatch : -Infinity;
   }
   async function resolve(source) {
-    if (source.spotifyUri?.startsWith('spotify:track:')) return window.SpotifyApp.request(`/tracks/${encodeURIComponent(source.spotifyUri.slice(14))}`);
+    if (source.spotifyUri?.startsWith('spotify:track:')) {
+      try {
+        const exact = await window.SpotifyApp.request(`/tracks/${encodeURIComponent(source.spotifyUri.slice(14))}`);
+        if (exact?.uri && exact.is_playable !== false) return exact;
+      } catch(error) { if(error.code !== 'TRACK_NOT_FOUND') throw error; }
+    }
     const queries = [`track:${source.title} artist:${source.artist}`, `${source.title} ${source.artist}`];
     for (const query of queries) {
       const result = await window.SpotifyApp.request(`/search?q=${encodeURIComponent(query)}&type=track&limit=10`);
-      const found = (result.tracks?.items || []).map(item => ({ item, score: score(item, source) })).filter(candidate => candidate.score > 0).sort((a, b) => b.score - a.score)[0]?.item;
+      const found = (result?.tracks?.items || []).filter(item=>item?.uri && item.is_playable !== false).map(item => ({ item, score: score(item, source) })).filter(candidate => candidate.score > 0).sort((a, b) => b.score - a.score)[0]?.item;
       if (found) return found;
     }
     const error = new Error(`Geen betrouwbare Spotify-versie gevonden voor ${source.title} van ${source.artist}.`);
@@ -525,204 +530,305 @@
       return prepareRepeatTrack();
     }
   }
-  async function waitForTrack(uri) { for (let attempt = 0; attempt < 30; attempt += 1) { if (playerState?.track_window?.current_track?.uri === uri && !playerState.paused) return; await wait(150); } throw new Error('De browser kon de Spotify-audio niet starten. Koppel Spotify opnieuw en probeer daarna nogmaals.'); }
-  async function requestTrackPlayback(uri) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        await window.SpotifyApp.request(
-          `/me/player/play?device_id=${encodeURIComponent(browserDeviceId)}`,
-          'PUT',
-          { uris: [uri] }
-        );
-        return;
-      } catch (error) {
-        if (error.code !== 'SPOTIFY_PLAYBACK_FORBIDDEN' || attempt > 0) throw error;
-        // Spotify kan vlak na het registreren van een Web Playback-device
-        // tijdelijk 403/PREMIUM_REQUIRED teruggeven. Een korte retry met
-        // dezelfde geldige sessie voorkomt dat dit als OAuth-probleem voelt.
-        await wait(700);
+  const playerError = (message,code) => Object.assign(new Error(message),{code});
+  const isSpotifyAccessError = error =>
+    error?.code === 'SPOTIFY_ACCESS_INVALID' || error?.code === 'SPOTIFY_SESSION_EXPIRED';
+  let playerGeneration = 0;
+  let playerReady = false;
+  let resumeAfterReconnect = false;
+  let sessionLeaving = false;
+  let sdkCheck = null;
+  let lastPosition = 0;
+
+  function syncPlayerControls() {
+    const ready = playerReady && Boolean(browserDeviceId) && !sessionLeaving;
+    $('#startPlayback').disabled = !ready || actionInProgress;
+    $('#pauseButton').disabled = !ready || !currentTrack || actionInProgress;
+    $('#nextButton').disabled = !ready || !currentTrack || actionInProgress;
+    $('#retryPlayer').disabled = actionInProgress || sessionLeaving;
+    $('#startPlayback').hidden = Boolean(currentTrack);
+    if (ready && !currentTrack && !pendingTrack) $('#startPlayback').disabled = true;
+  }
+  function showRetry(message, title = 'Spotify-speler opnieuw verbinden') {
+    if (sessionLeaving) return;
+    setError(message);
+    setStatus(title,'Probeer de speler opnieuw te verbinden. Je afspeelhistorie blijft behouden.');
+    $('#retryPlayer').hidden = false;
+    syncPlayerControls();
+  }
+  function disconnectPlayer() {
+    playerGeneration++;
+    playerReady = false;
+    browserDeviceId = '';
+    if (currentTrack) {
+      if (playerState?.track_window?.current_track?.uri === currentTrack.uri) lastPosition = Math.max(0,Number(playerState.position)||0);
+      resumeAfterReconnect = true;
+      setPauseButton('play','Verder luisteren');
+    }
+    const previous = player;
+    player = null;
+    playerState = null;
+    isPlaying = false;
+    clearInterval(progressTimer);
+    try { previous?.disconnect(); } catch (_) {}
+    syncPlayerControls();
+  }
+  function clearSessionSelection() {
+    sessionStorage.removeItem('muziekmix.session.genre');
+    sessionStorage.removeItem('muziekmix.session.genres');
+  }
+  function handleSpotifyAccessLoss() {
+    if (spotifyAccessLossHandled || sessionLeaving) return;
+    spotifyAccessLossHandled = true;
+    sessionLeaving = true;
+    // SpotifyApp already invalidated only its authorization tokens.
+    // Do not call clear(): it would remove the persistent recovery reason.
+    clearSessionSelection();
+    disconnectPlayer();
+    window.location.replace('index.html');
+  }
+  async function verifySdkAccess() {
+    if (sdkCheck) return sdkCheck;
+    const job = (async()=>{
+      try { await window.SpotifyApp.profile(); }
+      catch(error) {
+        if (isSpotifyAccessError(error)) handleSpotifyAccessLoss();
+        // A temporary verification failure is not proof of revocation.
       }
+    })();
+    sdkCheck = job;
+    try { await job; } finally { if (sdkCheck === job) sdkCheck = null; }
+  }
+  async function guarded(action) {
+    if (actionInProgress || sessionLeaving) return;
+    actionInProgress = true;
+    syncPlayerControls();
+    try {
+      setError();
+      await action();
+    } catch (error) {
+      if (isSpotifyAccessError(error)) { handleSpotifyAccessLoss(); return; }
+      if (sessionLeaving) return;
+      if (error.code === 'SPOTIFY_DEVICE_UNAVAILABLE' || error.code === 'SPOTIFY_PLAYER_AUTH_ERROR' || error.code === 'SPOTIFY_PREMIUM_REQUIRED') {
+        disconnectPlayer();
+        showRetry(error.message);
+        if (error.code !== 'SPOTIFY_DEVICE_UNAVAILABLE') await verifySdkAccess();
+        return;
+      }
+      setError(error.message || 'Er ging iets mis.');
+      if (!playerReady || (!currentTrack && !pendingTrack)) {
+        showRetry(error.message || 'De speler kon niet worden voorbereid.');
+      } else {
+        setStatus('Afspelen niet gelukt','Probeer dezelfde actie opnieuw. Je Spotify-aanmelding blijft bewaard.');
+      }
+    } finally {
+      actionInProgress = false;
+      syncPlayerControls();
     }
   }
-
+  async function waitForSdk() {
+    if (window.Spotify?.Player) return;
+    const deadline = Date.now()+12000;
+    while (!window.Spotify?.Player && Date.now()<deadline) await wait(100);
+    if (!window.Spotify?.Player) throw playerError('De Spotify-browserplayer kon niet worden geladen. Controleer je internetverbinding en eventuele blokkades.','SPOTIFY_DEVICE_UNAVAILABLE');
+  }
+  async function initialisePlayer() {
+    disconnectPlayer();
+    await waitForSdk();
+    if (sessionLeaving) return;
+    const epoch = playerGeneration;
+    await new Promise((resolve,reject)=>{
+      let settled = false;
+      const active = () => epoch === playerGeneration && !sessionLeaving;
+      const finish = error => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) reject(error); else resolve();
+      };
+      const timer = setTimeout(()=>finish(playerError('De Spotify-speler reageert niet. Probeer opnieuw te verbinden.','SPOTIFY_DEVICE_UNAVAILABLE')),18000);
+      function fail(error) {
+        if (!active()) return;
+        if (!settled) { finish(error); return; }
+        if (isSpotifyAccessError(error)) { handleSpotifyAccessLoss(); return; }
+        disconnectPlayer();
+        showRetry(error.message);
+        if (error.code === 'SPOTIFY_PLAYER_AUTH_ERROR' || error.code === 'SPOTIFY_PREMIUM_REQUIRED') void verifySdkAccess();
+      }
+      try {
+        const sdk = new window.Spotify.Player({
+          name:'Muziekmix browserplayer',
+          getOAuthToken: async callback => {
+            try {
+              const token = await window.SpotifyApp.token();
+              if (active()) callback(token);
+            } catch(error) { fail(error); }
+          },
+          volume:0.8
+        });
+        player = sdk;
+        sdk.addListener('ready',({device_id}={})=>{
+          if (!active() || !device_id) return;
+          browserDeviceId = device_id;
+          playerReady = true;
+          $('#retryPlayer').hidden = true;
+          syncPlayerControls();
+          finish();
+        });
+        sdk.addListener('not_ready',()=>fail(playerError('De verbinding met het Spotify-afspeelapparaat is weggevallen.','SPOTIFY_DEVICE_UNAVAILABLE')));
+        sdk.addListener('initialization_error',({message}={})=>fail(playerError('De browser kan de Spotify-speler niet starten'+(message ? ': '+message : '.'),'SPOTIFY_DEVICE_UNAVAILABLE')));
+        sdk.addListener('authentication_error',({message}={})=>fail(playerError('Spotify-player kon niet authenticeren'+(message ? ': '+message : '.'),'SPOTIFY_PLAYER_AUTH_ERROR')));
+        sdk.addListener('account_error',({message}={})=>fail(playerError('De Spotify-speler vereist een geldig Premium-account'+(message ? ': '+message : '.'),'SPOTIFY_PREMIUM_REQUIRED')));
+        sdk.addListener('playback_error',({message}={})=>{ if(active()) setError('Spotify kon niet afspelen'+(message ? ': '+message : '.')); });
+        sdk.addListener('autoplay_failed',()=>{ if(active()) setError('De browser blokkeerde afspelen. Tik opnieuw op de playknop.'); });
+        sdk.addListener('player_state_changed',state=>{
+          if (!active()) return;
+          playerState = state;
+          stateUpdatedAt = Date.now();
+          if (currentTrack && state?.track_window?.current_track?.uri === currentTrack.uri) {
+            lastPosition = Number(state.position)||0;
+            isPlaying = !state.paused;
+            setPauseButton(isPlaying ? 'pause' : 'play',isPlaying ? 'Pauzeer' : 'Verder luisteren');
+            updateProgress();
+          }
+        });
+        Promise.resolve(sdk.connect()).then(connected=>{ if(!connected) fail(playerError('Spotify kon het browserapparaat niet verbinden.','SPOTIFY_DEVICE_UNAVAILABLE')); }).catch(fail);
+      } catch(error) { finish(error); }
+    }).catch(error=>{ if(epoch===playerGeneration) disconnectPlayer(); throw error; });
+  }
+  function ensureReady() {
+    if (!playerReady || !browserDeviceId || !player) throw playerError('Het Spotify-afspeelapparaat is niet beschikbaar.','SPOTIFY_DEVICE_UNAVAILABLE');
+  }
+  async function bounded(promise, message, milliseconds=10000) {
+    let timer;
+    try {
+      return await Promise.race([Promise.resolve(promise),new Promise((_,reject)=>{ timer=setTimeout(()=>reject(playerError(message,'SPOTIFY_DEVICE_UNAVAILABLE')),milliseconds); })]);
+    } finally { clearTimeout(timer); }
+  }
+  async function waitForTrack(uri) {
+    const epoch = playerGeneration;
+    const deadline = Date.now()+8000;
+    while (Date.now()<deadline) {
+      ensureReady();
+      if(epoch!==playerGeneration || sessionLeaving) throw playerError('De speler is ondertussen gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
+      if (playerState?.track_window?.current_track?.uri === uri && !playerState.paused) return;
+      // SDK callbacks can be sparse; ask the local player for its current state.
+      const state = await bounded(player.getCurrentState(),'De speler reageert niet.',3000);
+      if (state?.track_window?.current_track?.uri === uri && !state.paused) { playerState=state; stateUpdatedAt=Date.now(); return; }
+      await wait(250);
+    }
+    throw playerError('Spotify heeft het nummer niet gestart. Probeer dezelfde afspeelactie opnieuw.','SPOTIFY_PLAYBACK_NOT_STARTED');
+  }
+  async function requestTrackPlayback(uri,position) {
+    ensureReady();
+    const device = browserDeviceId;
+    const body = {uris:[uri],...(Number.isFinite(position) ? {position_ms:Math.max(0,Math.floor(position))} : {})};
+    try {
+      await window.SpotifyApp.request('/me/player/play?device_id='+encodeURIComponent(device),'PUT',body);
+    } catch(error) {
+      // Only a missing device warrants an explicit transfer. It is performed
+      // after the user's activation, never during initial page load.
+      if (error.code !== 'SPOTIFY_DEVICE_UNAVAILABLE' || !playerReady || browserDeviceId !== device) throw error;
+      await window.SpotifyApp.request('/me/player','PUT',{device_ids:[device],play:false});
+      await wait(350);
+      ensureReady();
+      if(browserDeviceId!==device) throw playerError('Het Spotify-apparaat is gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
+      await window.SpotifyApp.request('/me/player/play?device_id='+encodeURIComponent(device),'PUT',body);
+    }
+  }
+  async function activatePlayer() {
+    ensureReady();
+    // Call before awaiting track search or Web API, within the user's click.
+    await bounded(player.activateElement(),'De browser kon afspelen niet activeren.');
+  }
+  async function startTrack(track,position) {
+    ensureReady();
+    const epoch = playerGeneration;
+    await requestTrackPlayback(track.uri,position);
+    ensureReady();
+    if (epoch!==playerGeneration || sessionLeaving) throw playerError('De speler is ondertussen gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
+    // A mobile browser can remain paused after a remote play command.
+    const state = await bounded(player.getCurrentState(),'De speler reageert niet.',3000);
+    if (state?.paused && state?.track_window?.current_track?.uri === track.uri) await bounded(player.resume(),'Spotify kon het nummer niet hervatten.');
+    await waitForTrack(track.uri);
+    if (epoch!==playerGeneration || sessionLeaving) throw playerError('De speler is ondertussen gewijzigd.','SPOTIFY_DEVICE_UNAVAILABLE');
+  }
   async function playPending() {
+    await activatePlayer();
     if (!pendingTrack) await prepareTrack();
-
-    await player.activateElement();
-    await requestTrackPlayback(pendingTrack.spotify.uri);
-    await player.resume();
-    await waitForTrack(pendingTrack.spotify.uri);
-
-    renderTrack(pendingTrack.spotify, pendingTrack.source, false);
+    await startTrack(pendingTrack.spotify);
+    renderTrack(pendingTrack.spotify,pendingTrack.source,false);
     $('.player-card').classList.add('track-concealed');
     $('#revealButton').hidden = false;
     currentTrack = pendingTrack.spotify;
     used.add(key(pendingTrack.source));
     rememberPlayed(pendingTrack.source);
     pendingTrack = null;
+    resumeAfterReconnect = false;
+    lastPosition = Number(playerState?.position)||0;
     isPlaying = true;
     updateCount();
     startTimer();
-
-    $('#startPlayback').hidden = true;
     $('.player-card').classList.remove('awaiting-playback');
-    $('#pauseButton').disabled = false;
-    $('#nextButton').disabled = false;
-    setPauseButton('pause', 'Pauzeer');
-    setStatus('Sessie actief', `${used.size} unieke nummers afgespeeld.`, true);
+    setPauseButton('pause','Pauzeer');
+    setStatus('Sessie actief',`${used.size} unieke nummers afgespeeld.`,true);
   }
-
-  async function nextTrack() {
-    await prepareTrack();
-    await playPending();
-  }
-
   async function nextTrackFromButton() {
     const button = $('#nextButton');
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
+    button.setAttribute('aria-busy','true');
     try {
-      await nextTrack();
-    } finally {
-      button.disabled = false;
-      button.removeAttribute('aria-busy');
+      // pendingTrack survives failed playback; never choose another on retry.
+      await playPending();
+    } finally { button.removeAttribute('aria-busy'); }
+  }
+  async function togglePause() {
+    ensureReady();
+    if (resumeAfterReconnect) {
+      await activatePlayer();
+      await startTrack(currentTrack,lastPosition);
+      resumeAfterReconnect = false;
+      isPlaying = true;
+      startTimer();
+    } else if (isPlaying) {
+      await bounded(player.pause(),'Pauzeren is niet gelukt.');
+      updateProgress();
+      isPlaying = false;
+    } else {
+      await activatePlayer();
+      await bounded(player.resume(),'Hervatten is niet gelukt.');
+      isPlaying = true;
+      stateUpdatedAt = Date.now();
+    }
+    setPauseButton(isPlaying ? 'pause' : 'play',isPlaying ? 'Pauzeer' : 'Verder luisteren');
+    setStatus(isPlaying ? 'Sessie actief' : 'Gepauzeerd',isPlaying ? `${used.size} unieke nummers afgespeeld.` : 'Druk op Verder luisteren om te hervatten.',isPlaying);
+  }
+  async function preparePlayer() {
+    $('#retryPlayer').hidden = true;
+    setStatus('Sessie voorbereiden…','Spotify wordt verbonden.');
+    if (!currentTrack && !pendingTrack) await prepareTrack();
+    await initialisePlayer();
+    if (sessionLeaving) return;
+    if (!currentTrack) {
+      $('#trackTitle').textContent = 'Klaar om af te spelen';
+      $('#trackArtist').textContent = 'Tik op de playknop';
+      $('#trackYear').hidden = true;
+      setStatus('Klaar om af te spelen','Tik op de playknop om het eerste nummer te starten.');
+    } else {
+      setStatus('Spotify opnieuw verbonden','Hervat het nummer of ga verder met het volgende nummer.');
     }
   }
-
-  async function togglePause() { if (isPlaying) { await player.pause(); updateProgress(); isPlaying = false; setPauseButton('play', 'Verder luisteren'); setStatus('Gepauzeerd', 'Druk op Verder luisteren om deze track te hervatten.'); } else { await player.resume(); isPlaying = true; stateUpdatedAt = Date.now(); setPauseButton('pause', 'Pauzeer'); setStatus('Sessie actief', `${used.size} unieke nummers afgespeeld.`, true); } }
-  const isSpotifyAccessError = error =>
-    error?.code === 'SPOTIFY_ACCESS_INVALID' || error?.code === 'SPOTIFY_SESSION_EXPIRED';
-
-  function handleSpotifyAccessLoss() {
-    if (spotifyAccessLossHandled) return;
-    spotifyAccessLossHandled = true;
-    try { sessionStorage.setItem(spotifyIssueStorageKey, 'access'); } catch (_) {}
-    try { player?.pause?.().catch(() => {}); } catch (_) {}
-    try { player?.disconnect?.(); } catch (_) {}
-    clearInterval(progressTimer);
-    window.SpotifyApp.clear();
-    window.location.replace('index.html');
+  function leaveSession() {
+    sessionLeaving=true;
+    disconnectPlayer();
+    clearSessionSelection();
+    window.location.assign('index.html');
   }
-
-  async function guarded(action) {
-    if (actionInProgress) return;
-    actionInProgress = true;
-    try {
-      setError();
-      await action();
-    } catch (error) {
-      if (isSpotifyAccessError(error)) {
-        handleSpotifyAccessLoss();
-        return;
-      }
-
-      if (error.code === 'SPOTIFY_PLAYBACK_FORBIDDEN') {
-        setError(error.message || 'Spotify kon het afspelen tijdelijk niet starten.');
-        setStatus('Afspelen niet gestart', 'Je Spotify-koppeling blijft geldig. Probeer de playknop nogmaals.');
-        return;
-      }
-
-      if (error.code === 'SPOTIFY_PREMIUM_REQUIRED') {
-        setError(error.message || 'Voor de Spotify-browserplayer is Premium nodig.');
-        setStatus('Spotify-account controleren', 'Controleer het ingelogde Spotify-account of log opnieuw in.');
-        return;
-      }
-
-      setError(error.message || 'Er ging iets mis.');
-      setStatus('Actie niet gelukt', 'Controleer de Spotify-koppeling en probeer opnieuw.');
-    } finally {
-      actionInProgress = false;
-    }
-  }
-  async function waitForSdk() { if (window.Spotify) return; await new Promise((resolve, reject) => { window.onSpotifyWebPlaybackSDKReady = resolve; setTimeout(() => reject(new Error('De Spotify-browserplayer kon niet worden geladen. Controleer je internetverbinding.')), 10_000); }); }
-  async function initialisePlayer() {
-    await waitForSdk();
-
-    await new Promise((resolve, reject) => {
-      player = new window.Spotify.Player({
-        name: 'Muziekmix browserplayer',
-        getOAuthToken: async callback => {
-          try {
-            callback(await window.SpotifyApp.token());
-          } catch (error) {
-            callback('');
-            if (isSpotifyAccessError(error)) {
-              handleSpotifyAccessLoss();
-              return;
-            }
-            reject(error);
-          }
-        },
-        volume: 0.8
-      });
-
-      player.addListener('ready', ({ device_id }) => {
-        browserDeviceId = device_id;
-        resolve();
-      });
-
-      player.addListener('not_ready', () => {
-        browserDeviceId = '';
-      });
-
-      player.addListener('initialization_error', ({ message } = {}) => {
-        reject(new Error(`De browser kan de Spotify-player niet starten${message ? `: ${message}` : '.'}`));
-      });
-
-      // Een SDK-authenticatiefout is niet automatisch bewijs dat de gebruiker
-      // uit de Developer-allowlist is verwijderd. De /me-preflight op de
-      // startpagina bepaalt dat. Zo voorkomen we een foutieve herstel-lus.
-      player.addListener('authentication_error', ({ message } = {}) => {
-        const error = new Error(`De Spotify-browserplayer kon niet authenticeren${message ? `: ${message}` : '.'}`);
-        error.code = 'SPOTIFY_PLAYER_AUTH_ERROR';
-        if (browserDeviceId) {
-          setError(error.message);
-          setStatus('Spotify-player opnieuw proberen', 'Ga terug en gebruik Beheren → Opnieuw inloggen als dit blijft gebeuren.');
-        } else {
-          reject(error);
-        }
-      });
-
-      player.addListener('account_error', ({ message } = {}) => {
-        const error = new Error(`Voor afspelen is een geldig Spotify Premium-account nodig${message ? `: ${message}` : '.'}`);
-        error.code = 'SPOTIFY_PREMIUM_REQUIRED';
-        if (browserDeviceId) {
-          setError(error.message);
-          setStatus('Spotify-account controleren', 'Ga terug en log eventueel opnieuw in met het juiste Premium-account.');
-        } else {
-          reject(error);
-        }
-      });
-
-      player.addListener('playback_error', ({ message } = {}) => {
-        setError(`Spotify kon het nummer niet afspelen${message ? `: ${message}` : '.'}`);
-      });
-
-      player.addListener('autoplay_failed', () => {
-        setError('De browser blokkeerde automatisch afspelen. Tik nogmaals op Start afspelen.');
-      });
-
-      player.addListener('player_state_changed', state => {
-        if (!state) return;
-        playerState = state;
-        stateUpdatedAt = Date.now();
-        if (currentTrack && state.track_window.current_track.uri === currentTrack.uri) {
-          isPlaying = !state.paused;
-          updateProgress();
-        }
-      });
-
-      player.connect().then(connected => {
-        if (!connected) reject(new Error('Spotify-browserplayer kon niet verbinden.'));
-      });
-    });
-
-    // Geen automatische PUT /me/player-transfer meer. Op mobiel kan juist die
-    // transfer direct na 'ready' een 403/restriction geven. De echte playback
-    // start pas na de expliciete gebruikersklik via requestTrackPlayback().
-  }
-  function leaveSession() { clearInterval(progressTimer); player?.disconnect(); sessionStorage.removeItem('muziekmix.session.genre'); sessionStorage.removeItem('muziekmix.session.genres'); window.location.assign('index.html'); }
   function requestSessionExit() { if (!used.size) { leaveSession(); return; } const dialog = $('#exitDialog'); if (typeof dialog.showModal === 'function') dialog.showModal(); else if (window.confirm('Weet je zeker dat je deze sessie wilt verlaten?')) leaveSession(); }
-  $('#revealButton').addEventListener('click', () => { if (!currentTrack) return; const hasArtwork = $('#albumArt').dataset.available === 'true'; $('#albumArt').hidden = !hasArtwork; $('#albumFallback').hidden = hasArtwork; $('.player-card').classList.remove('track-concealed'); $('#revealButton').hidden = true; $('#spotifyTrackLink').hidden = $('#spotifyTrackLink').dataset.available !== 'true'; }); $('#startPlayback').addEventListener('click', () => guarded(playPending)); $('#pauseButton').addEventListener('click', () => guarded(togglePause)); $('#nextButton').addEventListener('click', () => guarded(nextTrackFromButton)); $('.back-button').addEventListener('click', event => { event.preventDefault(); requestSessionExit(); }); $('#endSession').addEventListener('click', requestSessionExit); $('#cancelExit').addEventListener('click', () => $('#exitDialog').close()); $('#confirmExit').addEventListener('click', leaveSession);
-  (async () => { if (!selectedGenres.length || !window.SpotifyApp.hasSession()) { window.location.replace('index.html'); return; } $('#sessionTitle').innerHTML = `${sessionGenreLabel()}<span>.</span>`; updateCount(); await guarded(async () => { await prepareTrack(); await initialisePlayer(); $('#trackTitle').textContent = 'Klaar om af te spelen'; $('#trackArtist').textContent = 'Tik op de playknop'; $('#trackYear').hidden = true; $('#startPlayback').disabled = false; setStatus('Klaar om af te spelen', 'Tik op de playknop om het eerste nummer te starten.'); }); })();
+  $('#revealButton').addEventListener('click', () => { if (!currentTrack) return; const hasArtwork = $('#albumArt').dataset.available === 'true'; $('#albumArt').hidden = !hasArtwork; $('#albumFallback').hidden = hasArtwork; $('.player-card').classList.remove('track-concealed'); $('#revealButton').hidden = true; $('#spotifyTrackLink').hidden = $('#spotifyTrackLink').dataset.available !== 'true'; }); $('#retryPlayer').addEventListener('click',()=>guarded(preparePlayer)); $('#startPlayback').addEventListener('click', () => guarded(playPending)); $('#pauseButton').addEventListener('click', () => guarded(togglePause)); $('#nextButton').addEventListener('click', () => guarded(nextTrackFromButton)); $('.back-button').addEventListener('click', event => { event.preventDefault(); requestSessionExit(); }); $('#endSession').addEventListener('click', requestSessionExit); $('#cancelExit').addEventListener('click', () => $('#exitDialog').close()); $('#confirmExit').addEventListener('click', leaveSession);
+  (async()=>{
+    if (!selectedGenres.length || !window.SpotifyApp.hasSession() || !window.SpotifyApp.hasRequiredScopes()) { window.location.replace('index.html'); return; }
+    $('#sessionTitle').innerHTML = `${sessionGenreLabel()}<span>.</span>`;
+    updateCount();
+    await guarded(preparePlayer);
+  })();
 })();
