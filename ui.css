@@ -746,3 +746,11 @@ body.landing-page {
     padding: 8px;
   }
 }
+
+
+.landing-page .spotify-premium-note {
+  margin: -4px 0 14px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
