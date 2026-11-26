@@ -9,6 +9,7 @@
   const authVersionKey = 'muziekmix.spotify.authVersion';
   const customClientIdKey = 'muziekmix.spotify.customClientId';
   const clientModeKey = 'muziekmix.spotify.clientMode';
+  const clientSourceKey = 'muziekmix.spotify.clientSource';
   const keys = {
     access: 'muziekmix.spotify.access',
     expiry: 'muziekmix.spotify.expiry',
@@ -29,6 +30,10 @@
 
   const storedCustomClientId = () => (localStorage.getItem(customClientIdKey) || '').trim();
   const clientMode = () => localStorage.getItem(clientModeKey) === 'custom' && storedCustomClientId() ? 'custom' : 'default';
+  const clientSource = () => {
+    if (clientMode() !== 'custom') return 'default';
+    return localStorage.getItem(clientSourceKey) === 'shared' ? 'shared' : 'own';
+  };
   const currentClientId = () => clientMode() === 'custom' ? storedCustomClientId() : defaultClientId;
 
   function clearAuthState() {
@@ -43,15 +48,17 @@
     clearAuthState();
   }
 
-  function setCustomClientId(value) {
+  function setCustomClientId(value, source = 'own') {
     const next = String(value || '').trim();
     if (!/^[A-Za-z0-9]{20,128}$/.test(next)) {
       throw new Error('Vul een geldige Spotify Client ID in.');
     }
+    const normalizedSource = source === 'shared' ? 'shared' : 'own';
     const changed = clientMode() !== 'custom' || currentClientId() !== next;
     if (changed) clearAuthState();
     localStorage.setItem(customClientIdKey, next);
     localStorage.setItem(clientModeKey, 'custom');
+    localStorage.setItem(clientSourceKey, normalizedSource);
     return next;
   }
 
@@ -59,6 +66,7 @@
     const changed = clientMode() !== 'default';
     if (changed) clearAuthState();
     localStorage.setItem(clientModeKey, 'default');
+    localStorage.setItem(clientSourceKey, 'default');
   }
 
   if (localStorage.getItem(authVersionKey) !== authVersion) {
@@ -164,7 +172,7 @@
       code_challenge_method: 'S256',
       code_challenge: challenge,
       state,
-      scope: 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state'
+      scope: 'streaming user-read-private user-modify-playback-state user-read-playback-state'
     });
 
     window.location.assign(`https://accounts.spotify.com/authorize?${params}`);
@@ -219,6 +227,7 @@
     profile: () => request('/me'),
     redirectUri: () => redirectUri,
     clientMode,
+    clientSource,
     currentClientId,
     setCustomClientId,
     useDefaultClientId
