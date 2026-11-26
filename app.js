@@ -237,7 +237,7 @@
       if (accessInvalid || !window.SpotifyApp.hasSession()) {
         spotifyConnectionIssue = 'access';
         renderConnection(null);
-        setError(error.message || 'Spotify heeft de toegang tot deze koppeling geweigerd.');
+        setError();
         setStatus(
           'Spotify-koppeling herstellen',
           source === 'shared' || source === 'default'
@@ -388,7 +388,7 @@
     if (storedIssue && !window.SpotifyApp.hasSession()) {
       spotifyConnectionIssue = storedIssue;
       renderConnection(null);
-      setError('De Spotify-toegang tot deze Developer-koppeling is niet meer geldig.');
+      setError();
       setStatus('Spotify-koppeling herstellen', 'Open Beheren en koppel opnieuw of kies een andere Developer-koppeling.');
     }
   })();
