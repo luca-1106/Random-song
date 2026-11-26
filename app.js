@@ -68,12 +68,51 @@
 
   function renderConnection(profile) {
     const connected = Boolean(profile);
+    const customDeveloperApp = window.SpotifyApp.clientMode?.() === 'custom';
     $('#connectionIcon').classList.toggle('connected', connected);
-    $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : (window.SpotifyApp.configured() ? 'Spotify niet gekoppeld' : 'Spotify instellen vereist');
-    $('#connectionDetail').textContent = connected ? 'Klaar om een sessie te starten.' : (window.SpotifyApp.configured() ? 'Koppel je eigen account om af te spelen.' : 'De eigenaar moet eerst de Client ID instellen.');
+    $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : 'Spotify niet gekoppeld';
+    $('#connectionDetail').textContent = connected
+      ? (customDeveloperApp ? 'Via je eigen Spotify Developer-app.' : 'Via de bestaande Muziekmix-koppeling.')
+      : (customDeveloperApp ? 'Eigen Developer-app ingesteld. Koppel je Spotify-account.' : 'Kies de bestaande koppeling of gebruik je eigen Developer-app.');
     $('#connectSpotify').hidden = connected;
     $('#disconnectSpotify').hidden = !connected;
-    $('#connectSpotify').disabled = !connected && !window.SpotifyApp.configured();
+    $('#connectSpotify').disabled = false;
+  }
+
+  function openSpotifySetup() {
+    const dialog = $('#spotifySetupDialog');
+    if (!dialog) return;
+    $('#spotifyRedirectUri').value = window.SpotifyApp.redirectUri?.() || '';
+    $('#spotifyClientIdInput').value = window.SpotifyApp.clientMode?.() === 'custom'
+      ? (window.SpotifyApp.currentClientId?.() || '')
+      : '';
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  }
+
+  function closeSpotifySetup() {
+    const dialog = $('#spotifySetupDialog');
+    if (!dialog) return;
+    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+    else dialog.removeAttribute('open');
+  }
+
+  async function copySpotifyRedirect() {
+    const input = $('#spotifyRedirectUri');
+    const value = input?.value || '';
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch (_) {
+      input.focus();
+      input.select();
+      document.execCommand?.('copy');
+      input.setSelectionRange(0, 0);
+    }
+    const button = $('#copySpotifyRedirect');
+    const original = button.textContent;
+    button.textContent = 'Gekopieerd';
+    setTimeout(() => { button.textContent = original; }, 1400);
   }
 
   async function refreshConnection() {
@@ -135,10 +174,36 @@
     setStatus('Bibliotheek vrijgegeven', 'Alle nummers kunnen opnieuw worden gekozen.');
   });
 
-  $('#connectSpotify').addEventListener('click', () => guarded(() => window.SpotifyApp.login()));
-  $('#disconnectSpotify').addEventListener('click', () => { window.SpotifyApp.clear(); renderConnection(null); setStatus('Spotify ontkoppeld', 'Koppel een account om een sessie te starten.'); });
+  $('#connectSpotify').addEventListener('click', openSpotifySetup);
+  $('#closeSpotifySetup').addEventListener('click', closeSpotifySetup);
+  $('#spotifySetupDialog').addEventListener('cancel', event => {
+    event.preventDefault();
+    closeSpotifySetup();
+  });
+  $('#copySpotifyRedirect').addEventListener('click', () => guarded(copySpotifyRedirect));
+  $('#useDefaultSpotifyApp').addEventListener('click', () => guarded(async () => {
+    window.SpotifyApp.useDefaultClientId();
+    closeSpotifySetup();
+    await window.SpotifyApp.login();
+  }));
+  $('#connectCustomSpotifyApp').addEventListener('click', () => guarded(async () => {
+    const clientId = $('#spotifyClientIdInput').value.trim();
+    window.SpotifyApp.setCustomClientId(clientId);
+    closeSpotifySetup();
+    await window.SpotifyApp.login();
+  }));
+
+  $('#disconnectSpotify').addEventListener('click', () => {
+    window.SpotifyApp.clear();
+    renderConnection(null);
+    setStatus('Spotify ontkoppeld', 'Koppel een account om een sessie te starten.');
+  });
+
   $('#startSession').addEventListener('click', () => guarded(async () => {
-    if (!window.SpotifyApp.hasSession()) { await window.SpotifyApp.login(); return; }
+    if (!window.SpotifyApp.hasSession()) {
+      openSpotifySetup();
+      return;
+    }
     await window.SpotifyApp.token();
     sessionStorage.setItem('muziekmix.session.genres', JSON.stringify(selectedGenres));
     sessionStorage.removeItem('muziekmix.session.genre');
@@ -148,6 +213,7 @@
   (async () => {
     renderGenres();
     renderHistoryStatus();
+    $('#spotifyRedirectUri').value = window.SpotifyApp.redirectUri?.() || '';
     renderConnection(null);
     try { await window.SpotifyApp.handleCallback(); } catch (error) { setError(error.message); }
     await refreshConnection();
