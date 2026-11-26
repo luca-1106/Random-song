@@ -153,8 +153,32 @@
     if (!response.ok) {
       if (response.status === 404) throw new Error('Geen actief Spotify-apparaat gevonden. Open Spotify op je telefoon of speaker en speel daar kort iets af.');
       if (response.status === 403) {
-        clearAuthState();
-        throw codedError('Spotify weigert toegang tot deze Developer-koppeling. Controleer Spotify Premium en Users Management.', 'SPOTIFY_ACCESS_INVALID');
+        const reason = String(data.error?.reason || '').toUpperCase();
+        const message = data.error?.message || 'Spotify heeft deze actie geweigerd.';
+
+        // Alleen een geweigerd profielverzoek bewijst dat de OAuth/allowlist
+        // zelf niet meer geldig is. Player-403's kunnen ook ontstaan door
+        // device-, Premium- of tijdelijke playbackrestricties.
+        if (path === '/me' && method === 'GET') {
+          clearAuthState();
+          throw codedError(
+            'Spotify weigert toegang tot deze Developer-koppeling. Controleer of dit account nog toegang heeft.',
+            'SPOTIFY_ACCESS_INVALID'
+          );
+        }
+
+        if (path.startsWith('/me/player')) {
+          const error = codedError(
+            reason === 'PREMIUM_REQUIRED'
+              ? 'Spotify meldt tijdelijk dat Premium vereist is voor afspelen. Je koppeling blijft behouden.'
+              : `Spotify kon de afspeelactie niet uitvoeren: ${message}`,
+            'SPOTIFY_PLAYBACK_FORBIDDEN'
+          );
+          error.reason = reason;
+          throw error;
+        }
+
+        throw codedError(message, 'SPOTIFY_FORBIDDEN');
       }
       if (response.status === 429) throw new Error(data.error?.reason === 'QUOTA_EXCEEDED'
         ? 'De Spotify Developer-app heeft tijdelijk zijn API-quota bereikt.'
@@ -164,8 +188,9 @@
     return data;
   }
 
-  async function login() {
+  async function login(options = {}) {
     const clientId = currentClientId();
+    const showDialog = Boolean(options.showDialog);
     if (!clientId || clientId === placeholder) throw new Error('Kies eerst een geldige Spotify Developer-app.');
 
     const verifier = random(64);
@@ -184,10 +209,17 @@
       code_challenge_method: 'S256',
       code_challenge: challenge,
       state,
-      scope: 'streaming user-read-private user-modify-playback-state user-read-playback-state'
+      scope: 'streaming user-read-private user-modify-playback-state user-read-playback-state',
+      ...(showDialog ? { show_dialog: 'true' } : {})
     });
 
     window.location.assign(`https://accounts.spotify.com/authorize?${params}`);
+  }
+
+  async function reauthorize() {
+    // Bewaar Developer-keuze/Client ID, maar forceer een nieuwe Spotify-login.
+    clearAuthState();
+    return login({ showDialog: true });
   }
 
   async function handleCallback() {
@@ -233,6 +265,7 @@
     hasSession: () => Boolean(accessToken || refreshToken),
     clear,
     login,
+    reauthorize,
     token,
     request,
     handleCallback,
