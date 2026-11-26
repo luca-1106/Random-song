@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#121411"><meta name="description" content="Start een Spotify-sessie per muziekgenre.">
-  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=spotify-flow-redesign-2">
+  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=connection-management-1">
 </head>
 <body class="landing-page">
   <main class="app-shell">
     <header class="topbar"><div class="brand-mark" aria-hidden="true">♫</div><div><p class="eyebrow">JOUW EIGEN MUZIEKMIX</p><h1>Muziekmix<span>.</span></h1></div></header>
     <section class="intro" aria-live="polite"><div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Klaar voor een nieuwe sessie.</span></div><p id="instruction">Kies een genre, koppel Spotify en start je sessie.</p></section>
-    <section class="connection-card" aria-label="Spotify-verbinding"><div id="connectionIcon" class="connection-icon" aria-hidden="true">♫</div><div class="connection-copy"><strong id="spotifyConnection">Spotify niet gekoppeld</strong><span id="connectionDetail">Koppel je eigen account om af te spelen.</span></div><div class="connection-actions"><button id="connectSpotify" class="secondary-button compact-button" type="button">Koppelen</button><button id="manageSpotify" class="text-button" type="button" hidden>Beheren</button><button id="disconnectSpotify" class="text-button" type="button" hidden>Ontkoppel</button></div></section>
+    <section id="spotifyConnectionCard" class="connection-card" aria-label="Spotify-verbinding"><div class="connection-main"><div id="connectionIcon" class="connection-icon" aria-hidden="true">♫</div><div class="connection-copy"><strong id="spotifyConnection">Spotify niet gekoppeld</strong><span id="connectionDetail">Koppel je eigen account om af te spelen.</span></div></div><div class="connection-actions"><button id="connectSpotify" class="secondary-button compact-button connection-connect-button" type="button">Spotify koppelen</button><button id="manageSpotify" class="secondary-button compact-button connection-manage-button" type="button" hidden>Beheren</button><button id="disconnectSpotify" class="connection-disconnect-button" type="button" hidden>Ontkoppelen</button></div></section>
     <section class="genre-picker" aria-label="Kies een muziekgenre"><div class="genre-heading"><span class="eyebrow">KIES JE MUZIEK</span><span id="genreCount" class="genre-count"></span></div><div class="genre-multi">
   <button id="genreToggle" class="genre-select-wrap genre-multi-toggle" type="button" aria-expanded="false" aria-controls="genreMenu">
     <span class="genre-select-icon" aria-hidden="true">♫</span>
@@ -43,12 +43,22 @@
         <button id="closeSpotifySetup" class="spotify-setup-close" type="button" aria-label="Sluiten">×</button>
       </div>
 
+      <div id="spotifyCurrentConnection" class="spotify-current-connection" hidden>
+        <span class="spotify-current-status-dot" aria-hidden="true"></span>
+        <div>
+          <small id="spotifyCurrentConnectionEyebrow">Huidige koppeling</small>
+          <strong id="spotifyCurrentConnectionLabel"></strong>
+          <span id="spotifyCurrentConnectionAccount"></span>
+        </div>
+      </div>
+
       <div class="spotify-path-choices" role="group" aria-label="Kies een Spotify Developer-koppeling">
         <button id="spotifySharedPathToggle" class="spotify-path-choice" type="button" aria-expanded="false" aria-controls="spotifySharedPathPanel">
           <span class="spotify-path-number">1</span>
           <span class="spotify-path-choice-copy">
             <strong>Koppeling van iemand die je kent</strong>
             <small>Je hebt toegang of een Client ID gekregen.</small>
+            <span id="spotifySharedPathActiveBadge" class="spotify-path-active-badge" hidden>Actief</span>
           </span>
           <svg class="spotify-path-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
         </button>
@@ -58,6 +68,7 @@
           <span class="spotify-path-choice-copy">
             <strong>Eigen Developer-koppeling</strong>
             <small>Stel zelf je Spotify Developer-koppeling in.</small>
+            <span id="spotifyOwnPathActiveBadge" class="spotify-path-active-badge" hidden>Actief</span>
           </span>
           <svg class="spotify-path-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
         </button>
@@ -69,8 +80,8 @@
           <span>Dit kan een gedeelde Client ID zijn of de ingebouwde Muziekmix-koppeling.</span>
         </div>
 
-        <div class="spotify-panel-card">
-          <label class="spotify-setup-label" for="sharedSpotifyClientIdInput">Client ID gekregen?</label>
+        <div id="spotifySharedClientCard" class="spotify-panel-card">
+          <div class="spotify-panel-card-heading"><label class="spotify-setup-label" for="sharedSpotifyClientIdInput">Client ID gekregen?</label><span id="spotifySharedClientActiveBadge" class="spotify-sub-active-badge" hidden>Actief</span></div>
           <p>Plak hem hieronder. De eigenaar moet jouw Spotify-account eerst hebben toegevoegd bij <strong>Users Management</strong>.</p>
           <input id="sharedSpotifyClientIdInput" class="spotify-setup-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak hier de ontvangen Client ID" aria-label="Gedeelde Spotify Client ID">
           <button id="connectSharedSpotifyApp" class="primary-button full-button" type="button">Koppelen met deze Client ID</button>
@@ -78,9 +89,9 @@
 
         <div class="spotify-inline-divider"><span>of</span></div>
 
-        <div class="spotify-panel-card spotify-panel-card-compact">
+        <div id="spotifyDefaultClientCard" class="spotify-panel-card spotify-panel-card-compact">
           <div>
-            <strong>Ingebouwde Muziekmix-koppeling</strong>
+            <div class="spotify-panel-card-heading"><strong>Ingebouwde Muziekmix-koppeling</strong><span id="spotifyDefaultClientActiveBadge" class="spotify-sub-active-badge" hidden>Actief</span></div>
             <p>Gebruik deze alleen als je weet dat jouw Spotify-account hiervoor toegang heeft.</p>
           </div>
           <button id="useDefaultSpotifyApp" class="secondary-button full-button" type="button">Ingebouwde koppeling gebruiken</button>
@@ -145,6 +156,6 @@
       </section>
     </div>
   </dialog>
-  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=audit-fixes-1"></script><script src="app.js?v=spotify-flow-redesign-2"></script>
+  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=connection-management-1"></script><script src="app.js?v=connection-management-1"></script>
 </body>
 </html>
