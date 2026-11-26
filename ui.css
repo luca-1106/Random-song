@@ -327,3 +327,157 @@ body.landing-page {
     font-size: 11px;
   }
 }
+
+
+/* Spotify-koppeling: keuze tussen de bestaande app en een eigen Developer-app. */
+.landing-page .spotify-setup-dialog {
+  width: min(calc(100% - 24px), 440px);
+  max-width: none;
+  max-height: min(88dvh, 720px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #1a1e17;
+  color: var(--text);
+  box-shadow: 0 24px 80px #000c;
+  overflow: auto;
+}
+.landing-page .spotify-setup-dialog::backdrop {
+  background: #080a07c4;
+  backdrop-filter: blur(4px);
+}
+.landing-page .spotify-setup-content {
+  padding: 20px;
+}
+.landing-page .spotify-setup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.landing-page .spotify-setup-head .eyebrow {
+  margin: 0 0 6px;
+}
+.landing-page .spotify-setup-head h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.05;
+}
+.landing-page .spotify-setup-close {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #23281f;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.landing-page .spotify-setup-option {
+  width: 100%;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #536044;
+  border-radius: 15px;
+  background: #23291f;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.landing-page .spotify-setup-option strong {
+  font: 700 14px 'Space Grotesk', sans-serif;
+}
+.landing-page .spotify-setup-option span,
+.landing-page .spotify-custom-app > p,
+.landing-page .spotify-setup-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.landing-page .spotify-setup-divider {
+  position: relative;
+  margin: 15px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+.landing-page .spotify-setup-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--line);
+}
+.landing-page .spotify-setup-divider span {
+  position: relative;
+  padding: 0 9px;
+  background: #1a1e17;
+}
+.landing-page .spotify-custom-app h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.landing-page .spotify-custom-app > p {
+  margin: 0 0 12px;
+}
+.landing-page .spotify-setup-label {
+  display: block;
+  margin: 11px 0 5px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.landing-page .spotify-copy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+.landing-page .spotify-setup-input {
+  width: 100%;
+  min-width: 0;
+  height: 43px;
+  padding: 0 11px;
+  border: 1px solid #4a5540;
+  border-radius: 11px;
+  outline: 0;
+  background: #121511;
+  color: var(--text);
+  font: 500 11px/1.2 'Space Grotesk', sans-serif;
+}
+.landing-page .spotify-setup-input:focus {
+  border-color: var(--lime);
+  box-shadow: 0 0 0 3px #c9f67b1f;
+}
+.landing-page .spotify-setup-input[readonly] {
+  color: #c9cfbf;
+}
+.landing-page .spotify-developer-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--lime);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.landing-page .spotify-custom-app .full-button {
+  margin-top: 12px;
+}
+.landing-page .spotify-setup-note {
+  margin: 8px 0 0;
+}
+@media (max-height: 650px) {
+  .landing-page .spotify-setup-dialog {
+    max-height: 94dvh;
+  }
+  .landing-page .spotify-setup-content {
+    padding: 15px;
+  }
+}
