@@ -30,7 +30,13 @@ body.landing-page {
   padding: max(12px, env(safe-area-inset-top)) 0 max(12px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+}
+.landing-page .app-shell::-webkit-scrollbar {
+  display: none;
 }
 
 .landing-page .topbar,
@@ -50,8 +56,8 @@ body.landing-page {
 }
 
 .landing-page .start-card {
-  min-height: 0;
-  flex: 1;
+  min-height: 300px;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -113,6 +119,7 @@ body.landing-page {
   }
 
   .landing-page .start-card {
+    min-height: 220px;
     padding: 9px 12px;
     border-radius: 19px;
   }
@@ -726,6 +733,32 @@ body.landing-page {
   }
   .landing-page .spotify-copy-row .compact-button {
     width: 100%;
+  }
+}
+
+/* Landing alerts live outside the session card so extra text can never be clipped. */
+.landing-page .landing-alert {
+  margin: -7px 0 clamp(8px, 1.8dvh, 14px);
+  padding: 9px 11px;
+  border: 1px solid #6c493f;
+  border-radius: 11px;
+  background: #281c19;
+  color: #ffb1a3;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.landing-page .landing-alert[hidden] {
+  display: none !important;
+}
+.landing-page .connection-card:has(+ .landing-alert:not([hidden])) {
+  margin-bottom: 14px;
+}
+@media (max-height: 700px) {
+  .landing-page .landing-alert {
+    margin-top: -3px;
+    margin-bottom: 7px;
+    padding: 7px 9px;
+    font-size: 9px;
   }
 }
 
