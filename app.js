@@ -78,6 +78,7 @@
     $('#spotifyConnection').textContent = connected ? `Gekoppeld als ${profile.display_name || 'Spotify-gebruiker'}` : 'Spotify niet gekoppeld';
     $('#connectionDetail').textContent = connected ? sourceLabel : 'Kies een Developer-koppeling om Spotify te verbinden.';
     $('#connectSpotify').hidden = connected;
+    $('#manageSpotify').hidden = !connected;
     $('#disconnectSpotify').hidden = !connected;
     $('#connectSpotify').disabled = false;
   }
@@ -179,6 +180,7 @@
   });
 
   $('#connectSpotify').addEventListener('click', openSpotifySetup);
+  $('#manageSpotify').addEventListener('click', openSpotifySetup);
   $('#closeSpotifySetup').addEventListener('click', closeSpotifySetup);
   $('#spotifySetupDialog').addEventListener('cancel', event => {
     event.preventDefault();
