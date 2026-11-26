@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#121411"><meta name="description" content="Start een Spotify-sessie per muziekgenre.">
-  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=spotify-sharing-2">
+  <title>Muziekmix</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=match-fix-1"><link rel="stylesheet" href="ui.css?v=spotify-two-paths-1">
 </head>
 <body class="landing-page">
   <main class="app-shell">
@@ -37,36 +37,61 @@
       <div class="spotify-setup-head">
         <div>
           <p class="eyebrow">SPOTIFY KOPPELEN</p>
-          <h2 id="spotifySetupTitle">Kies je koppeling</h2>
+          <h2 id="spotifySetupTitle">Kies één van twee opties</h2>
         </div>
         <button id="closeSpotifySetup" class="spotify-setup-close" type="button" aria-label="Sluiten">×</button>
       </div>
 
-      <p class="spotify-choice-help"><strong>Weet je dat je toegang hebt tot de bestaande Muziekmix-koppeling?</strong> Gebruik dan de eerste knop. Is dat niet bij je bekend? Koppel dan je eigen Spotify Developer-app via de stappen hieronder.</p>
+      <section class="spotify-path">
+        <div class="spotify-path-title">
+          <span class="spotify-path-number">1</span>
+          <div>
+            <h3>Gebruik de Developer-koppeling van iemand die je kent</h3>
+            <p>Gebruik deze optie als iemand je toegang heeft gegeven. Hieronder valt ook de ingebouwde Muziekmix-koppeling.</p>
+          </div>
+        </div>
 
-      <button id="useDefaultSpotifyApp" class="spotify-setup-option" type="button">
-        <strong>Bestaande Muziekmix-koppeling gebruiken</strong>
-        <span>Alleen gebruiken als je weet dat jouw Spotify-account hiervoor toegang heeft.</span>
-      </button>
+        <div class="spotify-known-options">
+          <div class="spotify-known-option">
+            <strong>Heb je een Client ID ontvangen?</strong>
+            <span>Plak die hieronder. De eigenaar moet jouw Spotify-account vooraf toegang hebben gegeven.</span>
+            <input id="sharedSpotifyClientIdInput" class="spotify-setup-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak hier de ontvangen Client ID" aria-label="Gedeelde Spotify Client ID">
+            <button id="connectSharedSpotifyApp" class="primary-button full-button" type="button">Gebruik deze koppeling</button>
+          </div>
 
-      <div class="spotify-setup-divider"><span>eigen koppeling</span></div>
+          <div class="spotify-known-or"><span>of</span></div>
 
-      <section class="spotify-custom-app">
-        <h3>Eigen Spotify Developer-app koppelen</h3>
-        <p class="spotify-custom-intro">Je hebt hiervoor Spotify Premium nodig. Je vult in Muziekmix alleen je <strong>Client ID</strong> in — nooit een Client Secret.</p>
+          <div class="spotify-known-option compact">
+            <strong>Gebruik de ingebouwde Muziekmix-koppeling</strong>
+            <span>Alleen kiezen als je weet dat jouw Spotify-account hiervoor toegang heeft.</span>
+            <button id="useDefaultSpotifyApp" class="secondary-button full-button" type="button">Gebruik ingebouwde koppeling</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="spotify-setup-divider"><span>of</span></div>
+
+      <section class="spotify-path spotify-custom-app">
+        <div class="spotify-path-title">
+          <span class="spotify-path-number">2</span>
+          <div>
+            <h3>Gebruik je eigen Spotify Developer-app</h3>
+            <p>Heb je geen Developer-koppeling van iemand anders? Maak dan zelf een Spotify Developer-app.</p>
+          </div>
+        </div>
 
         <ol class="spotify-setup-steps">
           <li>
             <div>
               <strong>Open Spotify for Developers</strong>
-              <span>Maak daar een nieuwe app aan of open je bestaande app.</span>
+              <span>Maak een nieuwe app aan of open je bestaande app.</span>
             </div>
             <a class="spotify-developer-link spotify-step-action" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Open Dashboard</a>
           </li>
           <li>
             <div>
               <strong>Voeg deze Redirect URI exact toe</strong>
-              <span>Kopieer hem hieronder en plak hem bij de Redirect URI's van je Spotify-app.</span>
+              <span>Plak hem bij de Redirect URI's van je Spotify-app.</span>
             </div>
             <div class="spotify-copy-row">
               <input id="spotifyRedirectUri" class="spotify-setup-input" type="text" readonly aria-label="Redirect URI">
@@ -75,47 +100,38 @@
           </li>
           <li>
             <div>
-              <strong>Kopieer je Client ID</strong>
-              <span>Je vindt de Client ID in je Spotify Developer-app. Plak hem hieronder.</span>
+              <strong>Plak je Client ID in Muziekmix</strong>
+              <span>Je vindt de Client ID in je Spotify Developer-app.</span>
             </div>
             <input id="spotifyClientIdInput" class="spotify-setup-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak hier je Client ID" aria-label="Spotify Client ID">
           </li>
           <li>
             <div>
               <strong>Koppel Spotify</strong>
-              <span>Muziekmix opent Spotify. Log daar in met het Spotify-account waarmee je wilt spelen.</span>
+              <span>Log daarna bij Spotify in met het account waarmee je wilt spelen.</span>
             </div>
             <button id="connectCustomSpotifyApp" class="primary-button full-button" type="button">Opslaan en Spotify koppelen</button>
           </li>
         </ol>
 
-        <p class="spotify-setup-note">Je Client ID wordt alleen in deze browser opgeslagen. Een Client ID mag openbaar zijn; een Client Secret niet.</p>
+        <p class="spotify-setup-note">Gebruik alleen je Client ID. Vul of deel nooit een Client Secret.</p>
 
-        <div class="spotify-share-box">
-          <h4>Deze Developer-app delen met iemand anders?</h4>
-          <p>Dat kan met maximaal 5 geautoriseerde Spotify-gebruikers. De eigenaar moet de ander eerst toegang geven in Spotify.</p>
-          <ol class="spotify-share-steps">
-            <li>Open je app in het Spotify Developer Dashboard.</li>
-            <li>Ga naar <strong>Settings → Users Management → Add new user</strong>.</li>
-            <li>Vul de naam en het Spotify-e-mailadres van de ander in.</li>
-            <li>Stuur die persoon daarna alleen jouw <strong>Client ID</strong>.</li>
-          </ol>
-          <p class="spotify-share-note">De andere gebruiker kiest hieronder “Developer-app van iemand anders”, plakt jouw Client ID en logt in met zijn eigen Spotify-account.</p>
-        </div>
-      </section>
-
-      <div class="spotify-setup-divider"><span>gedeelde koppeling</span></div>
-
-      <section class="spotify-shared-app">
-        <h3>Developer-app van iemand anders gebruiken</h3>
-        <p>Gebruik dit alleen als de eigenaar deze Developer-app al voor Muziekmix heeft ingesteld, jou heeft toegevoegd bij <strong>Users Management</strong> en zijn Client ID met je heeft gedeeld.</p>
-        <label class="spotify-setup-label" for="sharedSpotifyClientIdInput">Client ID van de eigenaar</label>
-        <input id="sharedSpotifyClientIdInput" class="spotify-setup-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak hier de gedeelde Client ID">
-        <button id="connectSharedSpotifyApp" class="primary-button full-button" type="button">Gebruik deze koppeling en log in</button>
-        <p class="spotify-setup-note">Je logt daarna gewoon in met je eigen Spotify-account. Als de eigenaar je niet heeft toegevoegd, zal Spotify de app later weigeren.</p>
+        <details class="spotify-share-details">
+          <summary>Wil je jouw Developer-koppeling ook met iemand anders delen?</summary>
+          <div class="spotify-share-details-content">
+            <p>Voeg die persoon eerst toe in Spotify en stuur daarna alleen je Client ID.</p>
+            <ol>
+              <li>Open je app in het Spotify Developer Dashboard.</li>
+              <li>Ga naar <strong>Settings → Users Management → Add new user</strong>.</li>
+              <li>Vul de naam en het Spotify-e-mailadres van die persoon in.</li>
+              <li>Stuur daarna jouw <strong>Client ID</strong>. Die persoon gebruikt vervolgens optie 1 in Muziekmix.</li>
+            </ol>
+            <p>Een Development Mode-app kan maximaal 5 geautoriseerde gebruikers hebben.</p>
+          </div>
+        </details>
       </section>
     </div>
   </dialog>
-  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=spotify-own-app-2"></script><script src="app.js?v=spotify-sharing-2"></script>
+  <script src="config.js?v=player-auth-1"></script><script src="tracks.js?v=empty-library-1"></script><script src="library/v2-pop.js?v=library-v2-3"></script><script src="library/v2-rock.js?v=library-v2-3"></script><script src="library/v2-nederlands.js?v=library-v2-3"></script><script src="library/v2-guilty.js?v=library-v2-3"></script><script src="library/v2-yachterock.js?v=library-v2-3"></script><script src="library/v2-soul.js?v=library-v2-3"></script><script src="library/v2-funkdisco.js?v=library-v2-3"></script><script src="library/v2-country.js?v=library-v2-3"></script><script src="library/v2-gitaarmuziek.js?v=library-v2-3"></script><script src="library/v2-bluesjazzswing.js?v=library-v2-3"></script><script src="library/v2-merge.js?v=library-v2-3"></script><script src="spotify.js?v=spotify-own-app-2"></script><script src="app.js?v=spotify-two-paths-1"></script>
 </body>
 </html>
