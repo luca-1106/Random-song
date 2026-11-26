@@ -754,3 +754,19 @@ body.landing-page {
   font-size: 10px;
   line-height: 1.4;
 }
+
+
+.landing-page .connection-actions {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+}
+.landing-page .connection-actions .text-button {
+  padding: 3px 6px;
+}
+@media (max-width: 380px) {
+  .landing-page .connection-actions .text-button {
+    font-size: 10px;
+  }
+}
