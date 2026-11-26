@@ -534,3 +534,12 @@ body.session-page {
   font-size: 13px;
   line-height: 1.2;
 }
+
+/* Recovery information must stay readable, including on short screens. */
+.session-page .error-message:not([hidden]) { display: block; max-height: none; overflow-wrap: anywhere; -webkit-line-clamp: unset; }
+.session-page .player-card:has(.error-message:not([hidden])),
+.session-page .player-card:has(#retryPlayer:not([hidden])) { overflow-y: auto; grid-template-rows: minmax(min-content,1fr) auto auto auto; }
+.session-page .player-card.awaiting-playback:has(#retryPlayer:not([hidden])) { grid-template-rows: minmax(100px,1fr) auto auto; }
+.session-page .player-card:has(.error-message:not([hidden])) .track-display,
+.session-page .player-card:has(#retryPlayer:not([hidden])) .track-display { transform: none; overflow: visible; }
+.session-page #retryPlayer { width:100%; margin-bottom:4px; }
